@@ -636,21 +636,19 @@ export default function GasLimitMonitor() {
                   const avgSuffix = isBucketed ? ' avg' : '';
 
                   if (name === "Floor (Execution)") {
-                    const floor = props.payload?.floorBlobBaseFee ?? 0;
-                    return [`${value.toLocaleString()} wei${avgSuffix} (floor: ${floor.toLocaleString()})`, "Floor Component"];
+                    return [`${value.toLocaleString()} wei${avgSuffix}`, "Floor"];
                   }
                   if (name === "Congestion") {
-                    return [`${value.toLocaleString()} wei${avgSuffix}`, "Congestion Component"];
+                    return [`${value.toLocaleString()} wei${avgSuffix}`, "Congestion"];
                   }
                   return [value.toString(), name];
                 }}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]?.payload) {
                     const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string; timestampRange?: string };
-                    const blockInfo = p.blockRange ? `Blocks: ${p.blockRange}` : `Block #${label}`;
 
-                    // Add timestamp range if available
-                    if (p.timestampRange) {
+                    // Show timestamp range first (more important), then block range
+                    if (p.timestampRange && p.blockRange) {
                       const [start, end] = p.timestampRange.split(',');
                       const formatTime = (iso: string) => {
                         const date = new Date(iso);
@@ -661,10 +659,13 @@ export default function GasLimitMonitor() {
                           hour12: false
                         });
                       };
-                      return `${blockInfo}\n${formatTime(start)} - ${formatTime(end)}`;
+                      return `${formatTime(start)} - ${formatTime(end)}\n(${p.blockRange})`;
                     }
 
-                    return blockInfo;
+                    // Fallback for bucketed data without timestamp
+                    if (p.blockRange) {
+                      return `Blocks: ${p.blockRange}`;
+                    }
                   }
                   return `Block #${label}`;
                 }}
