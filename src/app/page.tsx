@@ -207,7 +207,11 @@ export default function GasLimitMonitor() {
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
                 labelStyle={{ color: "#39ff14" }}
                 labelFormatter={tooltipLabelFormatter}
-                formatter={(value: number) => value.toLocaleString()}
+                formatter={(value: number, name: string, props: { payload?: Point }) => {
+                  const isBucketed = !!props.payload?.blockRange;
+                  const suffix = isBucketed ? ' (avg)' : '';
+                  return [value.toLocaleString() + suffix, name];
+                }}
               />
               <ReferenceLine
                 y={START_GAS_LIMIT}
@@ -295,9 +299,16 @@ export default function GasLimitMonitor() {
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
                 labelStyle={{ color: "#39ff14" }}
                 labelFormatter={tooltipLabelFormatter}
-                formatter={(value: number, name: string) => {
-                  if (name === "Base Fee") return [`${(value / 1e9).toFixed(2)} Gwei`, "Base Fee"];
-                  if (name === "ETH Burned") return [`${value.toFixed(4)} ETH`, "ETH Burned"];
+                formatter={(value: number, name: string, props: { payload?: Point }) => {
+                  const isBucketed = !!props.payload?.blockRange;
+                  if (name === "Base Fee") {
+                    const suffix = isBucketed ? ' (avg)' : '';
+                    return [`${(value / 1e9).toFixed(2)} Gwei${suffix}`, "Base Fee"];
+                  }
+                  if (name === "ETH Burned") {
+                    const suffix = isBucketed ? ' (total)' : '';
+                    return [`${value.toFixed(4)} ETH${suffix}`, "ETH Burned"];
+                  }
                   return [value.toString(), name];
                 }}
               />
@@ -410,8 +421,12 @@ export default function GasLimitMonitor() {
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
                 labelStyle={{ color: "#39ff14" }}
                 labelFormatter={tooltipLabelFormatter}
-                formatter={(value: number, name: string) => {
-                  if (name === "Blob Count") return [value.toString(), "Blob Count"];
+                formatter={(value: number, name: string, props: { payload?: Point }) => {
+                  const isBucketed = !!props.payload?.blockRange;
+                  if (name === "Blob Count") {
+                    const suffix = isBucketed ? ' (total)' : '';
+                    return [value.toString() + suffix, "Blob Count"];
+                  }
                   if (name === "10-Block Avg") return [value.toFixed(2), "10-Block Avg"];
                   return [value.toString(), name];
                 }}
@@ -612,13 +627,16 @@ export default function GasLimitMonitor() {
               <Tooltip
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
                 labelStyle={{ color: "#39ff14" }}
-                formatter={(value: number, name: string, props: { payload?: { floorBlobBaseFee?: number; totalBlobBaseFee?: number } }) => {
+                formatter={(value: number, name: string, props: { payload?: { floorBlobBaseFee?: number; totalBlobBaseFee?: number; blockRange?: string } }) => {
+                  const isBucketed = !!props.payload?.blockRange;
+                  const avgSuffix = isBucketed ? ' avg' : '';
+
                   if (name === "Floor (Execution)") {
                     const floor = props.payload?.floorBlobBaseFee ?? 0;
-                    return [`${value.toLocaleString()} wei (floor: ${floor.toLocaleString()})`, "Floor Component"];
+                    return [`${value.toLocaleString()} wei${avgSuffix} (floor: ${floor.toLocaleString()})`, "Floor Component"];
                   }
                   if (name === "Congestion") {
-                    return [`${value.toLocaleString()} wei`, "Congestion Component"];
+                    return [`${value.toLocaleString()} wei${avgSuffix}`, "Congestion Component"];
                   }
                   return [value.toString(), name];
                 }}
