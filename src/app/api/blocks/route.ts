@@ -9,6 +9,9 @@ export async function GET(request: Request) {
     const afterBlock = searchParams.get('after');
     const limit = Math.min(parseInt(searchParams.get('limit') || '110'), 200);
 
+    // Optional: time-based filtering
+    const timeRange = searchParams.get('timeRange'); // '1h', '4h', '12h', '24h', or null for 'recent'
+
     let result;
 
     if (afterBlock) {
@@ -20,8 +23,31 @@ export async function GET(request: Request) {
          LIMIT $2`,
         [parseInt(afterBlock), limit]
       );
+    } else if (timeRange) {
+      // Fetch blocks from the specified time range
+      const intervalMap: Record<string, string> = {
+        '1h': '1 hour',
+        '4h': '4 hours',
+        '12h': '12 hours',
+        '24h': '24 hours',
+      };
+
+      const interval = intervalMap[timeRange];
+      if (!interval) {
+        return NextResponse.json(
+          { error: 'Invalid timeRange. Use: 1h, 4h, 12h, or 24h' },
+          { status: 400 }
+        );
+      }
+
+      result = await pool.query<BlockRow>(
+        `SELECT * FROM blocks
+         WHERE created_at >= NOW() - INTERVAL '${interval}'
+         ORDER BY block_number ASC`,
+        []
+      );
     } else {
-      // Fetch most recent blocks
+      // Fetch most recent blocks (default: last 110)
       result = await pool.query<BlockRow>(
         `SELECT * FROM blocks
          ORDER BY block_number DESC

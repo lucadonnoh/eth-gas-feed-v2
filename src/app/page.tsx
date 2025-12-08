@@ -56,6 +56,7 @@ export default function GasLimitMonitor() {
     count: number;
     percentage: number;
   }> | null>(null);
+  const [timeRange, setTimeRange] = useState<'recent' | '1h' | '4h' | '12h' | '24h'>('recent');
   const TARGET_GAS_LIMIT = 60_000_000;
   const START_GAS_LIMIT = 45_000_000;
 
@@ -603,7 +604,10 @@ export default function GasLimitMonitor() {
 
     const loadInitialBlocks = async () => {
       try {
-        const response = await fetch('/api/blocks');
+        const url = timeRange === 'recent'
+          ? '/api/blocks'
+          : `/api/blocks?timeRange=${timeRange}`;
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error('Failed to fetch initial blocks');
         }
@@ -674,14 +678,17 @@ export default function GasLimitMonitor() {
     // Initial load
     loadInitialBlocks();
 
-    // Start polling after initial load (every 3 seconds)
-    const pollInterval = setInterval(pollForNewBlocks, 3000);
+    // Start polling only for 'recent' mode (every 3 seconds)
+    let pollInterval: NodeJS.Timeout | undefined;
+    if (timeRange === 'recent') {
+      pollInterval = setInterval(pollForNewBlocks, 3000);
+    }
 
     return () => {
       isMounted = false;
-      clearInterval(pollInterval);
+      if (pollInterval) clearInterval(pollInterval);
     };
-  }, []);
+  }, [timeRange]);
 
   useEffect(() => {
     // Initialize lastBlockTime on mount if not set
@@ -764,7 +771,7 @@ export default function GasLimitMonitor() {
             <div className={`font-mono ${
               lastBlockTime === 0 ? 'text-green-400' :
               Date.now() - lastBlockTime > 30000 ? 'text-yellow-400' :
-              Date.now() - lastBlockTime > 60000 ? 'text-red-400' : 
+              Date.now() - lastBlockTime > 60000 ? 'text-red-400' :
               'text-green-400'
             }`}>
               {lastBlockTime === 0 ? '--:--:--' : new Date(lastBlockTime).toLocaleTimeString()}
@@ -773,6 +780,23 @@ export default function GasLimitMonitor() {
         )}
       </div>
 
+      {/* Time Range Selector */}
+      <div className="flex gap-2 items-center flex-wrap">
+        <span className="text-sm opacity-70">Time Range:</span>
+        {(['recent', '1h', '4h', '12h', '24h'] as const).map((range) => (
+          <button
+            key={range}
+            onClick={() => setTimeRange(range)}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              timeRange === range
+                ? 'bg-[#39ff14] text-black'
+                : 'bg-[#1a1a1a] text-[#39ff14] hover:bg-[#2a2a2a] border border-[#39ff14]/30'
+            }`}
+          >
+            {range === 'recent' ? 'Last 110 Blocks' : range.toUpperCase()}
+          </button>
+        ))}
+      </div>
 
       {isConnecting && (
         <div className="flex items-center gap-2 text-lg">
