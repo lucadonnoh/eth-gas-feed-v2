@@ -210,7 +210,6 @@ export default function GasLimitMonitor() {
     }));
 
     // Find max values for Y-axis domains
-    const maxBaseFee = Math.max(...dataWithBurned.map(d => d.baseFee), 1);
     const maxEthBurned = Math.max(...dataWithBurned.map(d => d.ethBurned), 0.1);
 
     return (
@@ -383,7 +382,7 @@ export default function GasLimitMonitor() {
         )}
       </CardContent>
     </Card>
-  ), [dataWithRollingAverage]);
+  ), [dataWithRollingAverage, data.length]);
 
   const priorityFeeChartComponent = useMemo(() => (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
@@ -587,7 +586,6 @@ export default function GasLimitMonitor() {
   }, [data]);
 
   useEffect(() => {
-    let pollInterval: NodeJS.Timeout;
     let isMounted = true;
     let latestBlockNumber: number | null = null;
 
@@ -677,7 +675,7 @@ export default function GasLimitMonitor() {
     loadInitialBlocks();
 
     // Start polling after initial load (every 3 seconds)
-    pollInterval = setInterval(pollForNewBlocks, 3000);
+    const pollInterval = setInterval(pollForNewBlocks, 3000);
 
     return () => {
       isMounted = false;
