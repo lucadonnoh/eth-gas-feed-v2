@@ -165,7 +165,8 @@ async function main() {
     }
   });
 
-  // Cleanup old blocks every hour
+  // Cleanup old blocks on startup and then every hour
+  await cleanupOldBlocks();
   setInterval(cleanupOldBlocks, 60 * 60 * 1000);
 
   // Handle graceful shutdown
