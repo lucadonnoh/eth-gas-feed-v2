@@ -62,9 +62,10 @@ export default function GasLimitMonitor() {
   const START_GAS_LIMIT = 45_000_000;
 
   // Custom label formatter for tooltips that shows block range if available
-  const tooltipLabelFormatter = (label: any, payload?: any) => {
-    if (payload && payload[0]?.payload?.blockRange) {
-      return `Blocks: ${payload[0].payload.blockRange}`;
+  const tooltipLabelFormatter = (label: number | string, payload?: readonly unknown[]) => {
+    const firstPayload = payload?.[0] as { payload?: Point } | undefined;
+    if (firstPayload?.payload?.blockRange) {
+      return `Blocks: ${firstPayload.payload.blockRange}`;
     }
     return `Block: ${label}`;
   };
@@ -152,8 +153,8 @@ export default function GasLimitMonitor() {
 
   // Memoize charts to prevent re-renders from timeToNext updates
   const gasLimitChartComponent = useMemo(() => {
-    // For time ranges, show all data. For 'recent', show last 100 blocks
-    const chartData = timeRange === 'recent' ? data.slice(-100) : data;
+    // Show all data for all time ranges
+    const chartData = data;
 
     return (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
@@ -216,11 +217,11 @@ export default function GasLimitMonitor() {
       </CardContent>
     </Card>
     );
-  }, [data, timeRange, TARGET_GAS_LIMIT]);
+  }, [data, TARGET_GAS_LIMIT]);
 
   const baseFeeChartComponent = useMemo(() => {
-    // For time ranges, show all data. For 'recent', show last 100 blocks
-    const chartData = timeRange === 'recent' ? data.slice(-100) : data;
+    // Show all data for all time ranges
+    const chartData = data;
 
     // Calculate ETH burned for each block
     const dataWithBurned = chartData.map(point => ({
@@ -309,7 +310,7 @@ export default function GasLimitMonitor() {
       </CardContent>
     </Card>
     );
-  }, [data, timeRange]);
+  }, [data]);
 
   // Calculate rolling average for blob count
   const dataWithRollingAverage = useMemo(() => {
@@ -324,9 +325,9 @@ export default function GasLimitMonitor() {
       };
     });
 
-    // For time ranges, show all data. For 'recent', show last 100 blocks
-    return timeRange === 'recent' ? dataWithAvg.slice(-100) : dataWithAvg;
-  }, [data, timeRange]);
+    // Show all data for all time ranges
+    return dataWithAvg;
+  }, [data]);
 
   const blobCountChartComponent = useMemo(() => (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
@@ -470,8 +471,8 @@ export default function GasLimitMonitor() {
   const GAS_PER_BLOB = 131072; // blob gas per blob
 
   const blobBaseFeeChartComponent = useMemo(() => {
-    // For time ranges, show all data. For 'recent', show last 100 blocks
-    const sourceData = timeRange === 'recent' ? data.slice(-100) : data;
+    // Show all data for all time ranges
+    const sourceData = data;
 
     // Calculate blob cost breakdown per EIP-7918
     // Floor cost (execution): BLOB_BASE_COST * base_fee_per_gas
@@ -611,7 +612,7 @@ export default function GasLimitMonitor() {
       </CardContent>
     </Card>
     );
-  }, [data, timeRange]);
+  }, [data]);
 
   useEffect(() => {
     let isMounted = true;
@@ -631,9 +632,7 @@ export default function GasLimitMonitor() {
 
     const loadInitialBlocks = async () => {
       try {
-        const url = timeRange === 'recent'
-          ? '/api/blocks'
-          : `/api/blocks?timeRange=${timeRange}`;
+        const url = `/api/blocks?timeRange=${timeRange}`;
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error('Failed to fetch initial blocks');
@@ -705,10 +704,10 @@ export default function GasLimitMonitor() {
     // Initial load
     loadInitialBlocks();
 
-    // Start polling only for 'recent' mode (every 3 seconds)
+    // Start polling for 1h mode (every 12 seconds to match block time)
     let pollInterval: NodeJS.Timeout | undefined;
-    if (timeRange === 'recent') {
-      pollInterval = setInterval(pollForNewBlocks, 3000);
+    if (timeRange === '1h') {
+      pollInterval = setInterval(pollForNewBlocks, 12000);
     }
 
     return () => {

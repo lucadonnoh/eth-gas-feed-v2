@@ -1,12 +1,12 @@
 import { GET } from '../route';
-import { pool } from '@/lib/db';
+import { pool, BlockRow } from '@/lib/db';
 
 // Mock the database pool
 jest.mock('@/lib/db', () => ({
   pool: {
     query: jest.fn(),
   },
-  rowToBlock: (row: any) => ({
+  rowToBlock: (row: BlockRow) => ({
     blockNumber: Number(row.block_number),
     gasLimit: Number(row.gas_limit),
     gasUsed: Number(row.gas_used),
@@ -106,7 +106,7 @@ describe('/api/blocks', () => {
 
       const request = new Request('http://localhost:3000/api/blocks?timeRange=4h');
       const response = await GET(request);
-      const data = await response.json();
+      await response.json();
 
       expect(response.status).toBe(200);
 
