@@ -67,8 +67,6 @@ export default function GasLimitMonitor() {
   const tooltipLabelFormatter = (label: number | string, payload?: readonly unknown[]) => {
     const firstPayload = payload?.[0] as { payload?: Point } | undefined;
     if (firstPayload?.payload?.blockRange) {
-      let result = '';
-
       // Add timestamp range if available (shown first)
       if (firstPayload?.payload?.timestampRange) {
         const [start, end] = firstPayload.payload.timestampRange.split(',');
@@ -81,13 +79,14 @@ export default function GasLimitMonitor() {
             hour12: false
           });
         };
-        result = `${formatTime(start)} - ${formatTime(end)}`;
-        result += `\n\n(${firstPayload.payload.blockRange})`;
+        // Return array to create separate lines
+        return [
+          `${formatTime(start)} - ${formatTime(end)}`,
+          `(${firstPayload.payload.blockRange})`
+        ];
       } else {
-        result = `Blocks: ${firstPayload.payload.blockRange}`;
+        return `Blocks: ${firstPayload.payload.blockRange}`;
       }
-
-      return result;
     }
     return `Block: ${label}`;
   };
@@ -659,7 +658,11 @@ export default function GasLimitMonitor() {
                           hour12: false
                         });
                       };
-                      return `${formatTime(start)} - ${formatTime(end)}\n\n(${p.blockRange})`;
+                      // Return array to create separate lines
+                      return [
+                        `${formatTime(start)} - ${formatTime(end)}`,
+                        `(${p.blockRange})`
+                      ];
                     }
 
                     // Fallback for bucketed data without timestamp
