@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         [parseInt(afterBlock), limit]
       );
     } else if (timeRange) {
-      // Fetch blocks from the specified time range
+      // Fetch blocks from the specified time range with time-based bucketing
       const intervalMap: Record<string, string> = {
         '1h': '1 hour',
         '4h': '4 hours',
@@ -32,18 +32,39 @@ export async function GET(request: Request) {
         '24h': '24 hours',
       };
 
+      // Time bucket sizes to keep ~50-60 points per chart
+      const bucketMap: Record<string, string> = {
+        '1h': '1 minute',   // ~60 points
+        '4h': '5 minutes',  // ~48 points
+        '12h': '15 minutes', // ~48 points
+        '24h': '30 minutes', // ~48 points
+      };
+
       const interval = intervalMap[timeRange];
-      if (!interval) {
+      const bucket = bucketMap[timeRange];
+
+      if (!interval || !bucket) {
         return NextResponse.json(
           { error: 'Invalid timeRange. Use: 1h, 4h, 12h, or 24h' },
           { status: 400 }
         );
       }
 
+      // Aggregate blocks into time buckets
       result = await pool.query<BlockRow>(
-        `SELECT * FROM blocks
+        `SELECT
+          MAX(block_number) as block_number,
+          ROUND(AVG(gas_limit)) as gas_limit,
+          ROUND(AVG(gas_used)) as gas_used,
+          ROUND(AVG(base_fee)) as base_fee,
+          ROUND(AVG(blob_count)) as blob_count,
+          ROUND(AVG(blob_base_fee)) as blob_base_fee,
+          ROUND(AVG(excess_blob_gas)) as excess_blob_gas,
+          MAX(block_timestamp) as created_at
+         FROM blocks
          WHERE block_timestamp >= NOW() - INTERVAL '${interval}'
-         ORDER BY block_number ASC`,
+         GROUP BY date_trunc('${bucket}', block_timestamp)
+         ORDER BY MAX(block_number) ASC`,
         []
       );
     } else {
