@@ -142,7 +142,11 @@ export default function GasLimitMonitor() {
   }, [lastBlockTime, hasError]);
 
   // Memoize charts to prevent re-renders from timeToNext updates
-  const gasLimitChartComponent = useMemo(() => (
+  const gasLimitChartComponent = useMemo(() => {
+    // For time ranges, show all data. For 'recent', show last 100 blocks
+    const chartData = timeRange === 'recent' ? data.slice(-100) : data;
+
+    return (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
       <CardContent>
         <h3 className="text-lg font-semibold mb-4">Gas Limit</h3>
@@ -156,7 +160,7 @@ export default function GasLimitMonitor() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={data.slice(-100)} margin={{ top: 20, right: 0, left: 0, bottom: 5 }}>
+            <LineChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 5 }}>
               <CartesianGrid stroke="#333" strokeDasharray="3 3" />
               <XAxis
                 dataKey="block"
@@ -201,11 +205,15 @@ export default function GasLimitMonitor() {
         )}
       </CardContent>
     </Card>
-  ), [data, TARGET_GAS_LIMIT]);
+    );
+  }, [data, timeRange, TARGET_GAS_LIMIT]);
 
   const baseFeeChartComponent = useMemo(() => {
+    // For time ranges, show all data. For 'recent', show last 100 blocks
+    const chartData = timeRange === 'recent' ? data.slice(-100) : data;
+
     // Calculate ETH burned for each block
-    const dataWithBurned = data.slice(-100).map(point => ({
+    const dataWithBurned = chartData.map(point => ({
       ...point,
       ethBurned: (point.gasUsed * point.baseFee) / 1e18 // Convert to ETH
     }));
@@ -290,24 +298,24 @@ export default function GasLimitMonitor() {
       </CardContent>
     </Card>
     );
-  }, [data]);
+  }, [data, timeRange]);
 
-  // Calculate rolling average for blob count and only show last 100 blocks
+  // Calculate rolling average for blob count
   const dataWithRollingAverage = useMemo(() => {
     const dataWithAvg = data.map((point, index) => {
       const start = Math.max(0, index - 9); // 10-block window
       const window = data.slice(start, index + 1);
       const avgBlobCount = window.reduce((sum, p) => sum + p.blobCount, 0) / window.length;
-      
+
       return {
         ...point,
         avgBlobCount: Number(avgBlobCount.toFixed(2))
       };
     });
-    
-    // Only return the last 100 blocks for visualization
-    return dataWithAvg.slice(-100);
-  }, [data]);
+
+    // For time ranges, show all data. For 'recent', show last 100 blocks
+    return timeRange === 'recent' ? dataWithAvg.slice(-100) : dataWithAvg;
+  }, [data, timeRange]);
 
   const blobCountChartComponent = useMemo(() => (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
@@ -447,10 +455,13 @@ export default function GasLimitMonitor() {
   const GAS_PER_BLOB = 131072; // blob gas per blob
 
   const blobBaseFeeChartComponent = useMemo(() => {
+    // For time ranges, show all data. For 'recent', show last 100 blocks
+    const sourceData = timeRange === 'recent' ? data.slice(-100) : data;
+
     // Calculate blob cost breakdown per EIP-7918
     // Floor cost (execution): BLOB_BASE_COST * base_fee_per_gas
     // Congestion cost: additional cost when blob_base_fee * GAS_PER_BLOB > floor
-    const chartData = data.slice(-100).map(point => {
+    const chartData = sourceData.map(point => {
       // Floor blob base fee equivalent (in wei per blob gas)
       // This is what the blob base fee would need to be to match the execution floor cost
       const floorBlobBaseFee = (BLOB_BASE_COST * point.baseFee) / GAS_PER_BLOB;
@@ -584,7 +595,7 @@ export default function GasLimitMonitor() {
       </CardContent>
     </Card>
     );
-  }, [data]);
+  }, [data, timeRange]);
 
   useEffect(() => {
     let isMounted = true;
