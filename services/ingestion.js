@@ -1,4 +1,7 @@
-require('dotenv').config({ path: '.env.local' });
+// Load .env.local for local development only
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config({ path: '.env.local' });
+}
 const { ethers } = require('ethers');
 const { Pool } = require('pg');
 
