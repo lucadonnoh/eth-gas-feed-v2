@@ -46,11 +46,14 @@ async function insertBlock(block) {
     : 0;
   const blobBaseFee = calculateBlobBaseFee(excessBlobGas);
 
+  // Convert block timestamp to JS Date
+  const blockTimestamp = block.timestamp ? new Date(Number(block.timestamp) * 1000) : null;
+
   const query = `
     INSERT INTO blocks (
       block_number, gas_limit, gas_used, base_fee,
-      blob_count, blob_base_fee, excess_blob_gas
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      blob_count, blob_base_fee, excess_blob_gas, block_timestamp
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (block_number) DO NOTHING
   `;
 
@@ -62,6 +65,7 @@ async function insertBlock(block) {
     blobCount,
     blobBaseFee,
     excessBlobGas,
+    blockTimestamp,
   ];
 
   await pool.query(query, values);

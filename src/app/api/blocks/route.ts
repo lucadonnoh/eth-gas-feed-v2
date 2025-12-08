@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 
       result = await pool.query<BlockRow>(
         `SELECT * FROM blocks
-         WHERE created_at >= NOW() - INTERVAL '${interval}'
+         WHERE block_timestamp >= NOW() - INTERVAL '${interval}'
          ORDER BY block_number ASC`,
         []
       );

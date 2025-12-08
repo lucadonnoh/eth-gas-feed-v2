@@ -21,6 +21,7 @@ async function migrate() {
         blob_count SMALLINT NOT NULL DEFAULT 0,
         blob_base_fee NUMERIC(78, 0) NOT NULL DEFAULT 0,
         excess_blob_gas BIGINT NOT NULL DEFAULT 0,
+        block_timestamp TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
@@ -37,6 +38,12 @@ async function migrate() {
       ON blocks (block_number DESC);
     `);
     console.log('✓ Index "idx_blocks_block_number_desc" created');
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_blocks_block_timestamp
+      ON blocks (block_timestamp DESC);
+    `);
+    console.log('✓ Index "idx_blocks_block_timestamp" created');
 
     console.log('✅ Migration complete!');
     await pool.end();
