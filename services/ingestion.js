@@ -1,3 +1,4 @@
+require('dotenv').config({ path: '.env.local' });
 const { ethers } = require('ethers');
 const { Pool } = require('pg');
 
