@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { ethers } from "ethers";
 import {
   LineChart,
   Line,
@@ -38,33 +37,6 @@ type Point = {
   }> | null;
 };
 
-// EIP-7691 Prague parameters for blob basefee calculation
-const MIN_BASE_FEE_PER_BLOB_GAS = 1;
-const BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE = 5007716;
-
-// Fake exponential approximation from EIP-4844
-function fakeExponential(factor: number, numerator: number, denominator: number): number {
-  let i = 1;
-  let output = 0;
-  let numeratorAccum = factor * denominator;
-  
-  while (numeratorAccum > 0) {
-    output += numeratorAccum;
-    numeratorAccum = Math.floor((numeratorAccum * numerator) / (denominator * i));
-    i += 1;
-  }
-  
-  return Math.floor(output / denominator);
-}
-
-// Calculate blob basefee using EIP-7691 parameters
-function calculateBlobBaseFee(excessBlobGas: number): number {
-  return fakeExponential(
-    MIN_BASE_FEE_PER_BLOB_GAS,
-    excessBlobGas,
-    BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE
-  );
-}
 
 /**
  * GasLimitMonitor – main page component showing a live terminal‑style dashboard
@@ -88,58 +60,6 @@ export default function GasLimitMonitor() {
   const START_GAS_LIMIT = 45_000_000;
 
   // Function to fill gaps in block sequence
-  const fillBlockGap = async (startBlock: number, endBlock: number, provider: ethers.WebSocketProvider) => {
-    try {
-      // Create array of block numbers to fetch
-      const blockNumbers = Array.from(
-        { length: endBlock - startBlock + 1 }, 
-        (_, i) => startBlock + i
-      );
-      
-      // Batch fetch all missing blocks in parallel
-      const blockPromises = blockNumbers.map(blockNum => provider.getBlock(blockNum));
-      const blockResults = await Promise.all(blockPromises);
-      
-      // Process the results
-      const missingBlocks: Point[] = blockResults
-        .filter(block => block !== null)
-        .map(block => {
-          const excessBlobGas = Number((block as unknown as Record<string, unknown>)['excessBlobGas'] ?? 0);
-          return {
-            block: block!.number,
-            gasLimit: Number(block!.gasLimit),
-            gasUsed: Number(block!.gasUsed),
-            baseFee: Number(block!.baseFeePerGas || 0),
-            blobCount: block!.blobGasUsed ? Math.ceil(Number(block!.blobGasUsed) / 131072) : 0,
-            blobBaseFee: calculateBlobBaseFee(excessBlobGas),
-            excessBlobGas,
-          };
-        });
-      
-      if (missingBlocks.length > 0) {
-        setData((prev) => {
-          // Insert missing blocks in the correct position, avoiding duplicates
-          const result = [...prev];
-          missingBlocks.forEach(missingBlock => {
-            // Check if block already exists
-            const exists = result.some(b => b.block === missingBlock.block);
-            if (!exists) {
-              const insertIndex = result.findIndex(b => b.block > missingBlock.block);
-              if (insertIndex === -1) {
-                result.push(missingBlock);
-              } else {
-                result.splice(insertIndex, 0, missingBlock);
-              }
-            }
-          });
-          return result.slice(-110); // Keep 110 blocks for rolling average calculation
-        });
-      }
-    } catch (err) {
-      console.error("Error filling block gap:", err);
-    }
-  };
-
   // Calculate gas limit change statistics
   const gasLimitStats = useMemo(() => {
     if (data.length < 2) {
@@ -667,173 +587,101 @@ export default function GasLimitMonitor() {
   }, [data]);
 
   useEffect(() => {
-    // Load initial historical blocks via API route
+    let pollInterval: NodeJS.Timeout;
+    let isMounted = true;
+    let latestBlockNumber: number | null = null;
+
+    const fetchPriorityFees = async (blockNumber: number) => {
+      try {
+        const res = await fetch(`/api/priority-fees?block=${blockNumber}`);
+        const data = await res.json();
+        if (isMounted && data.priorityFeeDistribution) {
+          setPriorityFeeData(data.priorityFeeDistribution);
+        }
+      } catch (err) {
+        console.error("Error fetching priority fees:", err);
+      }
+    };
+
     const loadInitialBlocks = async () => {
       try {
         const response = await fetch('/api/blocks');
         if (!response.ok) {
           throw new Error('Failed to fetch initial blocks');
         }
-        
-        const { blocks } = await response.json();
-        
-        setData(blocks);
-        if (blocks.length > 0) {
-          const latestBlock = blocks[blocks.length - 1];
-          setLatest(latestBlock);
-          setLastBlockTime(Date.now());
-          // Set priority fee distribution for latest block
-          if (latestBlock.priorityFeeDistribution) {
-            setPriorityFeeData(latestBlock.priorityFeeDistribution);
+
+        const { blocks, latestBlock } = await response.json();
+
+        if (isMounted) {
+          setData(blocks);
+          latestBlockNumber = latestBlock;
+
+          if (blocks.length > 0) {
+            const latestBlockData = blocks[blocks.length - 1];
+            setLatest(latestBlockData);
+            setLastBlockTime(Date.now());
+
+            // Fetch priority fees for latest block
+            fetchPriorityFees(latestBlockData.block);
           }
+
+          setIsConnecting(false);
+          setHasError(false);
         }
-        
-        return blocks; // Return blocks for WebSocket setup
       } catch (err) {
         console.error("Error loading initial blocks:", err);
-        return []; // Return empty array on error
-      }
-    };
-
-    // Cleanup function reference
-    let cleanup: (() => void) | null = null;
-
-    // Setup everything sequentially to avoid race conditions
-    const initializeApp = async () => {
-      // First load initial blocks
-      const initialBlocks = await loadInitialBlocks();
-      
-      // Only set connecting to false after we have initial data OR WebSocket is ready
-      setIsConnecting(false);
-      
-      // Then setup WebSocket
-      await setupWebSocket(initialBlocks);
-    };
-
-    // Get WebSocket URL from API route to keep RPC endpoints secure
-    const setupWebSocket = async (_initialBlocks: Point[]) => {
-      try {
-        const response = await fetch('/api/websocket-url');
-        const { wsUrl } = await response.json();
-        const provider = new ethers.WebSocketProvider(wsUrl);
-        
-        cleanup = setupProviderHandlers(provider, _initialBlocks);
-      } catch (err) {
-        console.error("Error getting WebSocket URL:", err);
-        // Fallback to default
-        const provider = new ethers.WebSocketProvider("wss://rpc.ankr.com/eth/ws");
-        cleanup = setupProviderHandlers(provider, _initialBlocks);
-      }
-    };
-
-    const setupProviderHandlers = (provider: ethers.WebSocketProvider, _initialBlocks: Point[]) => {
-      /**
-       * Handler for each new block emitted by the provider.
-       */
-      const onBlock = async (blockNumber: number) => {
-        try {
-          const block = await provider.getBlock(blockNumber);
-          if (!block) return;
-
-          const excessBlobGas = Number((block as unknown as Record<string, unknown>)['excessBlobGas'] ?? 0);
-          const point: Point = {
-            block: block.number,
-            gasLimit: Number(block.gasLimit),
-            gasUsed: Number(block.gasUsed),
-            baseFee: Number(block.baseFeePerGas || 0),
-            blobCount: block.blobGasUsed ? Math.ceil(Number(block.blobGasUsed) / 131072) : 0,
-            blobBaseFee: calculateBlobBaseFee(excessBlobGas),
-            excessBlobGas,
-          };
-
-          setLatest(point);
-          setLastBlockTime(Date.now());
+        if (isMounted) {
+          setHasError(true);
           setIsConnecting(false);
-          setHasError(false); // Clear error state on successful block
-          
-          // Fetch priority fee distribution for the new block
-          fetch(`/api/priority-fees?block=${block.number}`)
-            .then(res => res.json())
-            .then(data => {
-              if (data.priorityFeeDistribution) {
-                setPriorityFeeData(data.priorityFeeDistribution);
-              }
-            })
-            .catch(err => console.error("Error fetching priority fees:", err));
-          
-          // Add block and fill any gaps between last block and new block
-          setData((prev) => {
-            const lastBlock = prev[prev.length - 1];
-            if (!lastBlock) {
-              return [point];
-            }
-            
-            // Check if this block already exists in the data
-            const blockExists = prev.some(block => block.block === point.block);
-            if (blockExists) {
-              console.log(`Block ${point.block} already exists, skipping duplicate`);
-              return prev; // Skip duplicate
-            }
-            
-            // If this block is the immediate next one, just add it
-            if (point.block === lastBlock.block + 1) {
-              return [...prev.slice(-109), point];
-            }
-            
-            // If this block is newer but there's a gap, fill the gap
-            if (point.block > lastBlock.block + 1) {
-              // We'll fill the gap asynchronously and just add this block for now
-              fillBlockGap(lastBlock.block + 1, point.block - 1, provider);
-              return [...prev.slice(-109), point];
-            }
-            
-            // If this block is older, ignore it
-            if (point.block < lastBlock.block) {
-              console.log(`Block ${point.block} is older than latest ${lastBlock.block}, skipping`);
-              return prev;
-            }
-            
-            return prev;
-          });
-        } catch (err) {
-          console.error("Error fetching block:", err);
         }
-      };
-
-      // Add error handlers
-      const onError = (error: Error) => {
-        console.error("WebSocket error:", error);
-        setHasError(true);
-        setLastErrorTime(Date.now());
-        setIsConnecting(false);
-      };
-
-      provider.on("block", onBlock);
-      provider.on("error", onError);
-
-      return () => {
-        try {
-          provider.off("block", onBlock);
-          provider.off("error", onError);
-          
-          // Check if provider is still active before destroying
-          if (provider.websocket && provider.websocket.readyState <= WebSocket.OPEN) {
-            provider.destroy();
-          }
-        } catch (err) {
-          console.error("Error during cleanup:", err);
-        }
-      };
+      }
     };
 
-    // Start the initialization process
-    initializeApp();
+    const pollForNewBlocks = async () => {
+      if (latestBlockNumber === null) return;
 
-    // Return cleanup function
-    return () => {
-      if (cleanup) {
-        cleanup();
+      try {
+        const response = await fetch(`/api/blocks?after=${latestBlockNumber}&limit=50`);
+        if (!response.ok) return;
+
+        const { blocks: newBlocks, latestBlock } = await response.json();
+
+        if (isMounted && newBlocks.length > 0) {
+          setData(prev => {
+            // Merge new blocks, avoiding duplicates
+            const existingBlockNumbers = new Set(prev.map(b => b.block));
+            const uniqueNewBlocks = newBlocks.filter((b: Point) => !existingBlockNumbers.has(b.block));
+
+            if (uniqueNewBlocks.length === 0) return prev;
+
+            // Combine and keep last 110 blocks
+            return [...prev, ...uniqueNewBlocks].slice(-110);
+          });
+
+          latestBlockNumber = latestBlock;
+
+          const latestNewBlock = newBlocks[newBlocks.length - 1];
+          setLatest(latestNewBlock);
+          setLastBlockTime(Date.now());
+          setHasError(false);
+
+          // Fetch priority fees for the latest block
+          fetchPriorityFees(latestNewBlock.block);
+        }
+      } catch (err) {
+        console.error("Error polling for blocks:", err);
       }
+    };
+
+    // Initial load
+    loadInitialBlocks();
+
+    // Start polling after initial load (every 3 seconds)
+    pollInterval = setInterval(pollForNewBlocks, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
     };
   }, []);
 
