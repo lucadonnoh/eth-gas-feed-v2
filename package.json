@@ -10,7 +10,8 @@
     "test:watch": "jest --watch",
     "ingest": "node services/ingestion.js",
     "migrate": "node services/migrate.js",
-    "backfill": "node services/backfill.js"
+    "backfill": "node services/backfill.js",
+    "fix-timestamps": "node services/fix-timestamps.js"
   },
   "dependencies": {
     "@vercel/postgres": "^0.10.0",
