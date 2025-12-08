@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "ingest": "node services/ingestion.js"
+    "ingest": "node services/ingestion.js",
+    "migrate": "node services/migrate.js"
   },
   "dependencies": {
     "@vercel/postgres": "^0.10.0",
