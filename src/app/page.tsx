@@ -730,8 +730,13 @@ export default function GasLimitMonitor() {
 
             if (uniqueNewBlocks.length === 0) return prev;
 
-            // Combine and keep last 110 blocks
-            return [...prev, ...uniqueNewBlocks].slice(-110);
+            // Combine old and new blocks
+            const combined = [...prev, ...uniqueNewBlocks];
+
+            // Keep a reasonable maximum to prevent unbounded growth
+            // For 30m we expect ~150 blocks, so keep last 200 as a buffer
+            const maxBlocks = 200;
+            return combined.slice(-maxBlocks);
           });
 
           latestBlockNumber = latestBlock;
