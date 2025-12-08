@@ -32,25 +32,25 @@ export async function GET(request: Request) {
         '24h': '24 hours',
       };
 
-      // Time bucket sizes to keep ~50-60 points per chart
-      const bucketMap: Record<string, string> = {
-        '1h': '1 minute',   // ~60 points
-        '4h': '5 minutes',  // ~48 points
-        '12h': '15 minutes', // ~48 points
-        '24h': '30 minutes', // ~48 points
+      // Time bucket sizes (in seconds) to keep ~50-60 points per chart
+      const bucketSecondsMap: Record<string, number> = {
+        '1h': 60,        // 1 minute = 60 seconds (~60 points)
+        '4h': 300,       // 5 minutes = 300 seconds (~48 points)
+        '12h': 900,      // 15 minutes = 900 seconds (~48 points)
+        '24h': 1800,     // 30 minutes = 1800 seconds (~48 points)
       };
 
       const interval = intervalMap[timeRange];
-      const bucket = bucketMap[timeRange];
+      const bucketSeconds = bucketSecondsMap[timeRange];
 
-      if (!interval || !bucket) {
+      if (!interval || !bucketSeconds) {
         return NextResponse.json(
           { error: 'Invalid timeRange. Use: 1h, 4h, 12h, or 24h' },
           { status: 400 }
         );
       }
 
-      // Aggregate blocks into time buckets
+      // Aggregate blocks into time buckets using epoch-based bucketing
       // Only query blocks that have timestamps (backfilled data)
       result = await pool.query<BlockRow>(
         `SELECT
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
          FROM blocks
          WHERE block_timestamp IS NOT NULL
          AND block_timestamp >= NOW() - INTERVAL '${interval}'
-         GROUP BY date_trunc('${bucket}', block_timestamp)
+         GROUP BY floor(extract(epoch from block_timestamp) / ${bucketSeconds})
          ORDER BY MAX(block_number) ASC`,
         []
       );
