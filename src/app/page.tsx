@@ -63,13 +63,13 @@ export default function GasLimitMonitor() {
   const TARGET_GAS_LIMIT = 60_000_000;
   const START_GAS_LIMIT = 45_000_000;
 
-  // Custom label formatter for tooltips that shows block range and timestamp range if available
+  // Custom label formatter for tooltips that shows timestamp range first, then block range (smaller)
   const tooltipLabelFormatter = (label: number | string, payload?: readonly unknown[]) => {
     const firstPayload = payload?.[0] as { payload?: Point } | undefined;
     if (firstPayload?.payload?.blockRange) {
-      let result = `Blocks: ${firstPayload.payload.blockRange}`;
+      let result = '';
 
-      // Add timestamp range if available
+      // Add timestamp range if available (shown first)
       if (firstPayload?.payload?.timestampRange) {
         const [start, end] = firstPayload.payload.timestampRange.split(',');
         const formatTime = (iso: string) => {
@@ -81,7 +81,10 @@ export default function GasLimitMonitor() {
             hour12: false
           });
         };
-        result += `\n${formatTime(start)} - ${formatTime(end)}`;
+        result = `${formatTime(start)} - ${formatTime(end)}`;
+        result += `\n(${firstPayload.payload.blockRange})`;
+      } else {
+        result = `Blocks: ${firstPayload.payload.blockRange}`;
       }
 
       return result;
