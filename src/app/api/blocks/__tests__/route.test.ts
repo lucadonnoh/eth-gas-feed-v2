@@ -54,8 +54,8 @@ describe('/api/blocks', () => {
   });
 
   describe('Time range queries', () => {
-    it('should return all blocks for 1h time range (no bucketing)', async () => {
-      const mockBlocks = Array.from({ length: 300 }, (_, i) => ({
+    it('should return all blocks for 30m time range (no bucketing)', async () => {
+      const mockBlocks = Array.from({ length: 150 }, (_, i) => ({
         block_number: String(1000 + i),
         gas_limit: '30000000',
         gas_used: '15000000',
@@ -69,20 +69,20 @@ describe('/api/blocks', () => {
 
       (pool.query as jest.Mock)
         .mockResolvedValueOnce({ rows: mockBlocks }) // All blocks query
-        .mockResolvedValueOnce({ rows: [{ block_number: '1300' }] }); // Latest block query
+        .mockResolvedValueOnce({ rows: [{ block_number: '1150' }] }); // Latest block query
 
-      const request = new Request('http://localhost:3000/api/blocks?timeRange=1h');
+      const request = new Request('http://localhost:3000/api/blocks?timeRange=30m');
       const response = await GET(request);
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.blocks.length).toBe(300); // All blocks for 1h (~300)
+      expect(data.blocks.length).toBe(150); // All blocks for 30m (~150)
 
-      // Verify the query does NOT use bucketing for 1h
+      // Verify the query does NOT use bucketing for 30m
       const queryCall = (pool.query as jest.Mock).mock.calls[0];
       expect(queryCall[0]).toContain('SELECT * FROM blocks');
       expect(queryCall[0]).toContain('WHERE block_timestamp IS NOT NULL');
-      expect(queryCall[0]).toContain("INTERVAL '1 hour'");
+      expect(queryCall[0]).toContain("INTERVAL '30 minutes'");
       expect(queryCall[0]).not.toContain('GROUP BY'); // No bucketing
     });
 
@@ -129,7 +129,7 @@ describe('/api/blocks', () => {
       const data = await response.json();
 
       expect(response.status).toBe(400);
-      expect(data.error).toBe('Invalid timeRange. Use: 1h, 4h, 12h, or 24h');
+      expect(data.error).toBe('Invalid timeRange. Use: 30m, 4h, 12h, or 24h');
     });
 
     it('should only query blocks with timestamps', async () => {
@@ -137,7 +137,7 @@ describe('/api/blocks', () => {
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ block_number: '1000' }] });
 
-      const request = new Request('http://localhost:3000/api/blocks?timeRange=1h');
+      const request = new Request('http://localhost:3000/api/blocks?timeRange=30m');
       await GET(request);
 
       const queryCall = (pool.query as jest.Mock).mock.calls[0];

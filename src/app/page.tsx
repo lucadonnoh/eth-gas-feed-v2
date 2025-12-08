@@ -31,6 +31,7 @@ type Point = {
   blobBaseFee: number;
   excessBlobGas: number;
   blockRange?: string; // Optional: "123-125" for bucketed data
+  timestampRange?: string; // Optional: ISO timestamp range for bucketed data
   priorityFeeDistribution?: Array<{
     label: string;
     count: number;
@@ -57,15 +58,32 @@ export default function GasLimitMonitor() {
     count: number;
     percentage: number;
   }> | null>(null);
-  const [timeRange, setTimeRange] = useState<'1h' | '4h' | '12h' | '24h'>('1h');
+  const [timeRange, setTimeRange] = useState<'30m' | '4h' | '12h' | '24h'>('30m');
   const TARGET_GAS_LIMIT = 60_000_000;
   const START_GAS_LIMIT = 45_000_000;
 
-  // Custom label formatter for tooltips that shows block range if available
+  // Custom label formatter for tooltips that shows block range and timestamp range if available
   const tooltipLabelFormatter = (label: number | string, payload?: readonly unknown[]) => {
     const firstPayload = payload?.[0] as { payload?: Point } | undefined;
     if (firstPayload?.payload?.blockRange) {
-      return `Blocks: ${firstPayload.payload.blockRange}`;
+      let result = `Blocks: ${firstPayload.payload.blockRange}`;
+
+      // Add timestamp range if available
+      if (firstPayload?.payload?.timestampRange) {
+        const [start, end] = firstPayload.payload.timestampRange.split(',');
+        const formatTime = (iso: string) => {
+          const date = new Date(iso);
+          return date.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          });
+        };
+        result += `\n${formatTime(start)} - ${formatTime(end)}`;
+      }
+
+      return result;
     }
     return `Block: ${label}`;
   };
@@ -313,15 +331,15 @@ export default function GasLimitMonitor() {
   }, [data]);
 
   // Calculate rolling average for blob count
-  // Only for 1h (unbucketed) data - rolling average doesn't make sense for aggregated buckets
+  // Only for 30m (unbucketed) data - rolling average doesn't make sense for aggregated buckets
   const dataWithRollingAverage = useMemo(() => {
-    const isBucketed = timeRange !== '1h';
+    const isBucketed = timeRange !== '30m';
 
     const dataWithAvg = data.map((point, index) => {
       let avgBlobCount: number | undefined;
 
       if (!isBucketed) {
-        // For unbucketed data (1h), calculate true 10-block rolling average
+        // For unbucketed data (30m), calculate true 10-block rolling average
         const start = Math.max(0, index - 9);
         const window = data.slice(start, index + 1);
         avgBlobCount = window.reduce((sum, p) => sum + p.blobCount, 0) / window.length;
@@ -712,9 +730,9 @@ export default function GasLimitMonitor() {
     // Initial load
     loadInitialBlocks();
 
-    // Start polling for 1h mode (every 12 seconds to match block time)
+    // Start polling for 30m mode (every 12 seconds to match block time)
     let pollInterval: NodeJS.Timeout | undefined;
-    if (timeRange === '1h') {
+    if (timeRange === '30m') {
       pollInterval = setInterval(pollForNewBlocks, 12000);
     }
 
@@ -817,7 +835,7 @@ export default function GasLimitMonitor() {
       {/* Time Range Selector */}
       <div className="flex gap-2 items-center flex-wrap">
         <span className="text-sm opacity-70">Time Range:</span>
-        {(['1h', '4h', '12h', '24h'] as const).map((range) => (
+        {(['30m', '4h', '12h', '24h'] as const).map((range) => (
           <button
             key={range}
             onClick={() => setTimeRange(range)}

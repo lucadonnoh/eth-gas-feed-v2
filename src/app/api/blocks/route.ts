@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '110'), 200);
 
     // Optional: time-based filtering
-    const timeRange = searchParams.get('timeRange'); // '1h', '4h', '12h', '24h', or null for 'recent'
+    const timeRange = searchParams.get('timeRange'); // '30m', '4h', '12h', '24h', or null for 'recent'
 
     let result;
 
@@ -26,16 +26,16 @@ export async function GET(request: Request) {
     } else if (timeRange) {
       // Fetch blocks from the specified time range
       const intervalMap: Record<string, string> = {
-        '1h': '1 hour',
+        '30m': '30 minutes',
         '4h': '4 hours',
         '12h': '12 hours',
         '24h': '24 hours',
       };
 
       // Time bucket sizes (in seconds) - only for 4h, 12h, 24h
-      // 1h shows all blocks without bucketing (~300 blocks)
+      // 30m shows all blocks without bucketing (~150 blocks)
       const bucketSecondsMap: Record<string, number | null> = {
-        '1h': null,      // No bucketing - show all blocks (~300 blocks)
+        '30m': null,     // No bucketing - show all blocks (~150 blocks)
         '4h': 120,       // 2 minutes = 120 seconds (~120 points)
         '12h': 600,      // 10 minutes = 600 seconds (~72 points)
         '24h': 900,      // 15 minutes = 900 seconds (~96 points)
@@ -46,12 +46,12 @@ export async function GET(request: Request) {
 
       if (!interval) {
         return NextResponse.json(
-          { error: 'Invalid timeRange. Use: 1h, 4h, 12h, or 24h' },
+          { error: 'Invalid timeRange. Use: 30m, 4h, 12h, or 24h' },
           { status: 400 }
         );
       }
 
-      // For 1h: fetch all blocks without bucketing
+      // For 30m: fetch all blocks without bucketing
       if (bucketSeconds === null) {
         result = await pool.query<BlockRow>(
           `SELECT * FROM blocks
@@ -74,6 +74,8 @@ export async function GET(request: Request) {
             MAX(block_number) as block_number,
             MIN(block_number) as min_block,
             MAX(block_number) as max_block,
+            MIN(block_timestamp) as min_timestamp,
+            MAX(block_timestamp) as max_timestamp,
             ROUND(AVG(gas_limit)) as gas_limit,
             SUM(gas_used) as gas_used,
             ROUND(AVG(base_fee)) as base_fee,
