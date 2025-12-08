@@ -729,8 +729,15 @@ export default function GasLimitMonitor() {
 
           if (blocks.length > 0) {
             const latestBlockData = blocks[blocks.length - 1];
-            setLatest(latestBlockData);
-            setLastBlockTime(Date.now());
+
+            // Only update lastBlockTime if this is a new block
+            setLatest(prevLatest => {
+              const isNewBlock = !prevLatest || latestBlockData.block > prevLatest.block;
+              if (isNewBlock) {
+                setLastBlockTime(Date.now());
+              }
+              return latestBlockData;
+            });
 
             // Fetch priority fees for latest block
             fetchPriorityFees(latestBlockData.block);
