@@ -82,7 +82,7 @@ export default function GasLimitMonitor() {
           });
         };
         result = `${formatTime(start)} - ${formatTime(end)}`;
-        result += `\n(${firstPayload.payload.blockRange})`;
+        result += `\n\n(${firstPayload.payload.blockRange})`;
       } else {
         result = `Blocks: ${firstPayload.payload.blockRange}`;
       }
@@ -659,7 +659,7 @@ export default function GasLimitMonitor() {
                           hour12: false
                         });
                       };
-                      return `${formatTime(start)} - ${formatTime(end)}\n(${p.blockRange})`;
+                      return `${formatTime(start)} - ${formatTime(end)}\n\n(${p.blockRange})`;
                     }
 
                     // Fallback for bucketed data without timestamp
