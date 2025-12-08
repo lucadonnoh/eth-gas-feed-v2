@@ -79,11 +79,14 @@ export default function GasLimitMonitor() {
             hour12: false
           });
         };
-        // Return array to create separate lines
-        return [
-          `${formatTime(start)} - ${formatTime(end)}`,
-          `(${firstPayload.payload.blockRange})`
-        ];
+        // Use JSX to create proper line breaks
+        return (
+          <>
+            {formatTime(start)} - {formatTime(end)}
+            <br />
+            ({firstPayload.payload.blockRange})
+          </>
+        );
       } else {
         return `Blocks: ${firstPayload.payload.blockRange}`;
       }
@@ -658,11 +661,14 @@ export default function GasLimitMonitor() {
                           hour12: false
                         });
                       };
-                      // Return array to create separate lines
-                      return [
-                        `${formatTime(start)} - ${formatTime(end)}`,
-                        `(${p.blockRange})`
-                      ];
+                      // Use JSX to create proper line breaks
+                      return (
+                        <>
+                          {formatTime(start)} - {formatTime(end)}
+                          <br />
+                          ({p.blockRange})
+                        </>
+                      );
                     }
 
                     // Fallback for bucketed data without timestamp
