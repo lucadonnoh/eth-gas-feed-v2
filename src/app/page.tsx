@@ -643,10 +643,25 @@ export default function GasLimitMonitor() {
                 }}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]?.payload) {
-                    const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string };
+                    const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string; timestampRange?: string };
                     const blockInfo = p.blockRange ? `Blocks: ${p.blockRange}` : `Block #${label}`;
-                    const excessGas = p.excessBlobGas ? `${(p.excessBlobGas / 1e6).toFixed(2)}M` : '0';
-                    return `${blockInfo} | Total: ${p.totalBlobBaseFee?.toLocaleString()} wei | Excess Gas: ${excessGas}`;
+
+                    // Add timestamp range if available
+                    if (p.timestampRange) {
+                      const [start, end] = p.timestampRange.split(',');
+                      const formatTime = (iso: string) => {
+                        const date = new Date(iso);
+                        return date.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: false
+                        });
+                      };
+                      return `${blockInfo}\n${formatTime(start)} - ${formatTime(end)}`;
+                    }
+
+                    return blockInfo;
                   }
                   return `Block #${label}`;
                 }}
