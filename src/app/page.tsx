@@ -355,7 +355,28 @@ export default function GasLimitMonitor() {
     return dataWithAvg;
   }, [data, timeRange]);
 
-  const blobCountChartComponent = useMemo(() => (
+  const blobCountChartComponent = useMemo(() => {
+    // Calculate reference lines based on bucketing
+    // For bucketed data, blob count is SUM of all blobs in the bucket
+    const isBucketed = timeRange !== '30m';
+
+    let targetLine = 6;   // Default: 6 blobs per block
+    let maxLine = 9;      // Default: 9 blobs per block
+    let yAxisMax = 10;    // Default Y-axis max
+
+    if (isBucketed) {
+      // Calculate average blocks per bucket based on time range
+      const blocksPerBucket = timeRange === '4h' ? 10 :   // 2 min / 12 sec
+                             timeRange === '12h' ? 50 :   // 10 min / 12 sec
+                             timeRange === '24h' ? 75 :   // 15 min / 12 sec
+                             10;
+
+      targetLine = 6 * blocksPerBucket;
+      maxLine = 9 * blocksPerBucket;
+      yAxisMax = Math.ceil(maxLine * 1.2); // 20% padding
+    }
+
+    return (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
       <CardContent>
         <h3 className="text-lg font-semibold mb-4">Blob Count</h3>
@@ -379,7 +400,7 @@ export default function GasLimitMonitor() {
               />
               <YAxis
                 stroke="#39ff14"
-                domain={[0, 10]}
+                domain={[0, yAxisMax]}
                 tick={{ fontSize: 10 }}
                 tickFormatter={(v) => v.toString()}
                 width={30}
@@ -396,16 +417,16 @@ export default function GasLimitMonitor() {
                 }}
               />
               <ReferenceLine
-                y={6}
+                y={targetLine}
                 stroke="#ffa500"
                 strokeDasharray="4 4"
-                label={{ value: "6 Target", fill: "#ffa500", position: "top" }}
+                label={{ value: `${targetLine} Target`, fill: "#ffa500", position: "top" }}
               />
               <ReferenceLine
-                y={9}
+                y={maxLine}
                 stroke="#f00"
                 strokeDasharray="2 2"
-                label={{ value: "9 Max", fill: "#f00", position: "top" }}
+                label={{ value: `${maxLine} Max`, fill: "#f00", position: "top" }}
               />
               <Bar
                 dataKey="blobCount"
@@ -430,7 +451,8 @@ export default function GasLimitMonitor() {
         )}
       </CardContent>
     </Card>
-  ), [dataWithRollingAverage, data.length]);
+    );
+  }, [dataWithRollingAverage, data.length, timeRange]);
 
   const priorityFeeChartComponent = useMemo(() => (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
