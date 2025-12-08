@@ -313,21 +313,29 @@ export default function GasLimitMonitor() {
   }, [data]);
 
   // Calculate rolling average for blob count
+  // Only for 1h (unbucketed) data - rolling average doesn't make sense for aggregated buckets
   const dataWithRollingAverage = useMemo(() => {
+    const isBucketed = timeRange !== '1h';
+
     const dataWithAvg = data.map((point, index) => {
-      const start = Math.max(0, index - 9); // 10-block window
-      const window = data.slice(start, index + 1);
-      const avgBlobCount = window.reduce((sum, p) => sum + p.blobCount, 0) / window.length;
+      let avgBlobCount: number | undefined;
+
+      if (!isBucketed) {
+        // For unbucketed data (1h), calculate true 10-block rolling average
+        const start = Math.max(0, index - 9);
+        const window = data.slice(start, index + 1);
+        avgBlobCount = window.reduce((sum, p) => sum + p.blobCount, 0) / window.length;
+      }
+      // For bucketed data, don't calculate rolling average (blobCount is already a SUM)
 
       return {
         ...point,
-        avgBlobCount: Number(avgBlobCount.toFixed(2))
+        avgBlobCount: avgBlobCount !== undefined ? Number(avgBlobCount.toFixed(2)) : undefined
       };
     });
 
-    // Show all data for all time ranges
     return dataWithAvg;
-  }, [data]);
+  }, [data, timeRange]);
 
   const blobCountChartComponent = useMemo(() => (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
