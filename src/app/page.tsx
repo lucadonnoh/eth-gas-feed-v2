@@ -59,6 +59,7 @@ export default function GasLimitMonitor() {
     percentage: number;
   }> | null>(null);
   const [timeRange, setTimeRange] = useState<'30m' | '4h' | '12h' | '24h'>('30m');
+  const [isLoadingRange, setIsLoadingRange] = useState<boolean>(false);
   const TARGET_GAS_LIMIT = 60_000_000;
   const START_GAS_LIMIT = 45_000_000;
 
@@ -698,6 +699,7 @@ export default function GasLimitMonitor() {
 
     const loadInitialBlocks = async () => {
       try {
+        setIsLoadingRange(true);
         const url = `/api/blocks?timeRange=${timeRange}`;
         const response = await fetch(url);
         if (!response.ok) {
@@ -721,12 +723,14 @@ export default function GasLimitMonitor() {
 
           setIsConnecting(false);
           setHasError(false);
+          setIsLoadingRange(false);
         }
       } catch (err) {
         console.error("Error loading initial blocks:", err);
         if (isMounted) {
           setHasError(true);
           setIsConnecting(false);
+          setIsLoadingRange(false);
         }
       }
     };
@@ -1006,13 +1010,23 @@ export default function GasLimitMonitor() {
       </Card>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        {gasLimitChartComponent}
-        {baseFeeChartComponent}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        {blobCountChartComponent}
-        {blobBaseFeeChartComponent}
+      <div className="relative">
+        {isLoadingRange && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 rounded">
+            <div className="flex flex-col items-center gap-3">
+              <div className="animate-spin text-6xl">⏳</div>
+              <div className="text-lg text-[#39ff14]">Loading {timeRange} data...</div>
+            </div>
+          </div>
+        )}
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 transition-opacity duration-200 ${isLoadingRange ? 'opacity-30' : 'opacity-100'}`}>
+          {gasLimitChartComponent}
+          {baseFeeChartComponent}
+        </div>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-4 md:mt-6 transition-opacity duration-200 ${isLoadingRange ? 'opacity-30' : 'opacity-100'}`}>
+          {blobCountChartComponent}
+          {blobBaseFeeChartComponent}
+        </div>
       </div>
 
       {/* Priority Fee Distribution Chart */}
