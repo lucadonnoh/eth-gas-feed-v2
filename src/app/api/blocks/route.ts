@@ -34,12 +34,11 @@ export async function GET(request: Request) {
 
       // Time bucket sizes (in seconds) - only for 4h, 12h, 24h
       // 1h shows all blocks without bucketing (~300 blocks)
-      // Targeting ~100 data points per chart
       const bucketSecondsMap: Record<string, number | null> = {
         '1h': null,      // No bucketing - show all blocks (~300 blocks)
-        '4h': 144,       // 2.4 minutes = 144 seconds (~100 points)
-        '12h': 432,      // 7.2 minutes = 432 seconds (~100 points)
-        '24h': 864,      // 14.4 minutes = 864 seconds (~100 points)
+        '4h': 120,       // 2 minutes = 120 seconds (~120 points)
+        '12h': 600,      // 10 minutes = 600 seconds (~72 points)
+        '24h': 900,      // 15 minutes = 900 seconds (~96 points)
       };
 
       const interval = intervalMap[timeRange];

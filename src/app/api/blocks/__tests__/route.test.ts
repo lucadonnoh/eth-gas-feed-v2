@@ -87,10 +87,10 @@ describe('/api/blocks', () => {
     });
 
     it('should return bucketed data for 4h time range', async () => {
-      const mockBucketedBlocks = Array.from({ length: 100 }, (_, i) => ({
+      const mockBucketedBlocks = Array.from({ length: 120 }, (_, i) => ({
         block_number: String(2000 + i),
-        min_block: String(2000 + i * 2),
-        max_block: String(2000 + i * 2 + 1),
+        min_block: String(2000 + i * 10),
+        max_block: String(2000 + i * 10 + 9),
         gas_limit: '30000000',
         gas_used: '15000000',
         base_fee: '50000000000',
@@ -102,7 +102,7 @@ describe('/api/blocks', () => {
 
       (pool.query as jest.Mock)
         .mockResolvedValueOnce({ rows: mockBucketedBlocks })
-        .mockResolvedValueOnce({ rows: [{ block_number: '2100' }] });
+        .mockResolvedValueOnce({ rows: [{ block_number: '2120' }] });
 
       const request = new Request('http://localhost:3000/api/blocks?timeRange=4h');
       const response = await GET(request);
@@ -110,9 +110,9 @@ describe('/api/blocks', () => {
 
       expect(response.status).toBe(200);
 
-      // Verify 2.4-minute buckets (144 seconds) and correct aggregations
+      // Verify 2-minute buckets (120 seconds) and correct aggregations
       const queryCall = (pool.query as jest.Mock).mock.calls[0];
-      expect(queryCall[0]).toContain('/ 144');
+      expect(queryCall[0]).toContain('/ 120');
       expect(queryCall[0]).toContain('AVG(gas_limit)'); // Average limit
       expect(queryCall[0]).toContain('SUM(gas_used)'); // Total gas used
       expect(queryCall[0]).toContain('AVG(base_fee)'); // Average fee
