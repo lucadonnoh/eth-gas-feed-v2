@@ -808,10 +808,41 @@ export default function GasLimitMonitor() {
     // Initial load
     loadInitialBlocks();
 
-    // Start polling for 30m mode (every 12 seconds to match block time)
+    // Polling function for non-30m ranges to keep countdown accurate
+    const pollLatestBlockOnly = async () => {
+      if (!isMounted) return;
+
+      try {
+        const response = await fetch(`/api/blocks?limit=1`);
+        if (!response.ok) return;
+
+        const { blocks, latestBlock } = await response.json();
+
+        if (isMounted && blocks.length > 0) {
+          const latestBlockData = blocks[0];
+
+          // Only update lastBlockTime if this is a new block
+          setLatest(prevLatest => {
+            const isNewBlock = !prevLatest || latestBlockData.block > prevLatest.block;
+            if (isNewBlock) {
+              setLastBlockTime(Date.now());
+              setHasError(false);
+            }
+            return latestBlockData;
+          });
+        }
+      } catch (err) {
+        console.error("Error polling for latest block:", err);
+      }
+    };
+
+    // Start polling: 30m mode updates chart data, others just update countdown
     let pollInterval: NodeJS.Timeout | undefined;
     if (timeRange === '30m') {
       pollInterval = setInterval(pollForNewBlocks, 12000);
+    } else {
+      // For other ranges, poll for latest block to keep countdown accurate
+      pollInterval = setInterval(pollLatestBlockOnly, 12000);
     }
 
     return () => {
