@@ -51,7 +51,7 @@ export function rowToBlock(row: BlockRow): Block {
     gasLimit: Number(row.gas_limit),
     gasUsed: Number(row.gas_used),
     baseFee: Number(row.base_fee),
-    blobCount: row.blob_count,
+    blobCount: Number(row.blob_count),
     blobBaseFee: Number(row.blob_base_fee),
     excessBlobGas: Number(row.excess_blob_gas),
     ...(blockRange && { blockRange }),
