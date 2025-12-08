@@ -51,6 +51,7 @@ export async function GET(request: Request) {
       }
 
       // Aggregate blocks into time buckets
+      // Only query blocks that have timestamps (backfilled data)
       result = await pool.query<BlockRow>(
         `SELECT
           MAX(block_number) as block_number,
@@ -62,7 +63,8 @@ export async function GET(request: Request) {
           ROUND(AVG(excess_blob_gas)) as excess_blob_gas,
           MAX(block_timestamp) as created_at
          FROM blocks
-         WHERE block_timestamp >= NOW() - INTERVAL '${interval}'
+         WHERE block_timestamp IS NOT NULL
+         AND block_timestamp >= NOW() - INTERVAL '${interval}'
          GROUP BY date_trunc('${bucket}', block_timestamp)
          ORDER BY MAX(block_number) ASC`,
         []
