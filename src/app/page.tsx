@@ -30,6 +30,7 @@ type Point = {
   blobCount: number;
   blobBaseFee: number;
   excessBlobGas: number;
+  blockRange?: string; // Optional: "123-125" for bucketed data
   priorityFeeDistribution?: Array<{
     label: string;
     count: number;
@@ -56,9 +57,17 @@ export default function GasLimitMonitor() {
     count: number;
     percentage: number;
   }> | null>(null);
-  const [timeRange, setTimeRange] = useState<'recent' | '1h' | '4h' | '12h' | '24h'>('recent');
+  const [timeRange, setTimeRange] = useState<'1h' | '4h' | '12h' | '24h'>('1h');
   const TARGET_GAS_LIMIT = 60_000_000;
   const START_GAS_LIMIT = 45_000_000;
+
+  // Custom label formatter for tooltips that shows block range if available
+  const tooltipLabelFormatter = (label: any, payload?: any) => {
+    if (payload && payload[0]?.payload?.blockRange) {
+      return `Blocks: ${payload[0].payload.blockRange}`;
+    }
+    return `Block: ${label}`;
+  };
 
   // Function to fill gaps in block sequence
   // Calculate gas limit change statistics
@@ -178,6 +187,7 @@ export default function GasLimitMonitor() {
               <Tooltip
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
                 labelStyle={{ color: "#39ff14" }}
+                labelFormatter={tooltipLabelFormatter}
                 formatter={(value: number) => value.toLocaleString()}
               />
               <ReferenceLine
@@ -265,6 +275,7 @@ export default function GasLimitMonitor() {
               <Tooltip
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
                 labelStyle={{ color: "#39ff14" }}
+                labelFormatter={tooltipLabelFormatter}
                 formatter={(value: number, name: string) => {
                   if (name === "Base Fee") return [`${(value / 1e9).toFixed(2)} Gwei`, "Base Fee"];
                   if (name === "ETH Burned") return [`${value.toFixed(4)} ETH`, "ETH Burned"];
@@ -350,6 +361,7 @@ export default function GasLimitMonitor() {
               <Tooltip
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
                 labelStyle={{ color: "#39ff14" }}
+                labelFormatter={tooltipLabelFormatter}
                 formatter={(value: number, name: string) => {
                   if (name === "Blob Count") return [value.toString(), "Blob Count"];
                   if (name === "10-Block Avg") return [value.toFixed(2), "10-Block Avg"];
@@ -434,7 +446,10 @@ export default function GasLimitMonitor() {
                   }
                   return [value.toString(), name];
                 }}
-                labelFormatter={(label) => `${label} Gwei`}
+                labelFormatter={(label, payload) => {
+                  const blockInfo = tooltipLabelFormatter(label, payload);
+                  return `${blockInfo} (${label} Gwei)`;
+                }}
               />
               <Bar
                 dataKey="count"
@@ -560,9 +575,10 @@ export default function GasLimitMonitor() {
                 }}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]?.payload) {
-                    const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number };
+                    const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string };
+                    const blockInfo = p.blockRange ? `Blocks: ${p.blockRange}` : `Block #${label}`;
                     const excessGas = p.excessBlobGas ? `${(p.excessBlobGas / 1e6).toFixed(2)}M` : '0';
-                    return `Block #${label} | Total: ${p.totalBlobBaseFee?.toLocaleString()} wei | Excess Gas: ${excessGas}`;
+                    return `${blockInfo} | Total: ${p.totalBlobBaseFee?.toLocaleString()} wei | Excess Gas: ${excessGas}`;
                   }
                   return `Block #${label}`;
                 }}
@@ -794,7 +810,7 @@ export default function GasLimitMonitor() {
       {/* Time Range Selector */}
       <div className="flex gap-2 items-center flex-wrap">
         <span className="text-sm opacity-70">Time Range:</span>
-        {(['recent', '1h', '4h', '12h', '24h'] as const).map((range) => (
+        {(['1h', '4h', '12h', '24h'] as const).map((range) => (
           <button
             key={range}
             onClick={() => setTimeRange(range)}
@@ -804,7 +820,7 @@ export default function GasLimitMonitor() {
                 : 'bg-[#1a1a1a] text-[#39ff14] hover:bg-[#2a2a2a] border border-[#39ff14]/30'
             }`}
           >
-            {range === 'recent' ? 'Last 110 Blocks' : range.toUpperCase()}
+            {range.toUpperCase()}
           </button>
         ))}
       </div>

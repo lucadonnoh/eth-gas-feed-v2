@@ -17,6 +17,8 @@ export interface BlockRow {
   blob_base_fee: string;
   excess_blob_gas: string;
   created_at: Date;
+  min_block?: string; // Optional: minimum block in bucket
+  max_block?: string; // Optional: maximum block in bucket
 }
 
 // Application block type (matches frontend Point type)
@@ -28,10 +30,15 @@ export interface Block {
   blobCount: number;
   blobBaseFee: number;
   excessBlobGas: number;
+  blockRange?: string; // Optional: "123-125" for bucketed data
 }
 
 // Convert database row to application block
 export function rowToBlock(row: BlockRow): Block {
+  const blockRange = row.min_block && row.max_block
+    ? `${row.min_block}-${row.max_block}`
+    : undefined;
+
   return {
     block: Number(row.block_number),
     gasLimit: Number(row.gas_limit),
@@ -40,5 +47,6 @@ export function rowToBlock(row: BlockRow): Block {
     blobCount: row.blob_count,
     blobBaseFee: Number(row.blob_base_fee),
     excessBlobGas: Number(row.excess_blob_gas),
+    ...(blockRange && { blockRange }),
   };
 }

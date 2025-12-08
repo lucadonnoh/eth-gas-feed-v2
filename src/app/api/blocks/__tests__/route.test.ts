@@ -54,42 +54,47 @@ describe('/api/blocks', () => {
   });
 
   describe('Time range queries', () => {
-    it('should return bucketed data for 1h time range', async () => {
-      const mockBucketedBlocks = Array.from({ length: 60 }, (_, i) => ({
+    it('should return all blocks for 1h time range (no bucketing)', async () => {
+      const mockBlocks = Array.from({ length: 300 }, (_, i) => ({
         block_number: String(1000 + i),
         gas_limit: '30000000',
         gas_used: '15000000',
         base_fee: '50000000000',
-        blob_count: '3',
+        blob_count: 3,
         blob_base_fee: '1000000',
         excess_blob_gas: '500000',
         created_at: new Date(),
+        block_timestamp: new Date(),
       }));
 
       (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: mockBucketedBlocks }) // Bucketed query
-        .mockResolvedValueOnce({ rows: [{ block_number: '1060' }] }); // Latest block query
+        .mockResolvedValueOnce({ rows: mockBlocks }) // All blocks query
+        .mockResolvedValueOnce({ rows: [{ block_number: '1300' }] }); // Latest block query
 
       const request = new Request('http://localhost:3000/api/blocks?timeRange=1h');
       const response = await GET(request);
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.blocks.length).toBeLessThanOrEqual(60); // ~1 minute buckets for 1h
+      expect(data.blocks.length).toBe(300); // All blocks for 1h (~300)
 
-      // Verify the query used epoch-based bucketing (not invalid date_trunc syntax)
+      // Verify the query does NOT use bucketing for 1h
       const queryCall = (pool.query as jest.Mock).mock.calls[0];
-      expect(queryCall[0]).toContain('floor(extract(epoch from block_timestamp)');
-      expect(queryCall[0]).toContain('/ 60'); // 60 seconds = 1 minute buckets
+      expect(queryCall[0]).toContain('SELECT * FROM blocks');
+      expect(queryCall[0]).toContain('WHERE block_timestamp IS NOT NULL');
+      expect(queryCall[0]).toContain("INTERVAL '1 hour'");
+      expect(queryCall[0]).not.toContain('GROUP BY'); // No bucketing
     });
 
     it('should return bucketed data for 4h time range', async () => {
       const mockBucketedBlocks = Array.from({ length: 48 }, (_, i) => ({
         block_number: String(2000 + i),
+        min_block: String(2000 + i * 5),
+        max_block: String(2000 + i * 5 + 4),
         gas_limit: '30000000',
         gas_used: '15000000',
         base_fee: '50000000000',
-        blob_count: '3',
+        blob_count: 3,
         blob_base_fee: '1000000',
         excess_blob_gas: '500000',
         created_at: new Date(),
@@ -105,9 +110,17 @@ describe('/api/blocks', () => {
 
       expect(response.status).toBe(200);
 
-      // Verify 5-minute buckets (300 seconds)
+      // Verify 5-minute buckets (300 seconds) and correct aggregations
       const queryCall = (pool.query as jest.Mock).mock.calls[0];
       expect(queryCall[0]).toContain('/ 300');
+      expect(queryCall[0]).toContain('AVG(gas_limit)'); // Average limit
+      expect(queryCall[0]).toContain('SUM(gas_used)'); // Total gas used
+      expect(queryCall[0]).toContain('AVG(base_fee)'); // Average fee
+      expect(queryCall[0]).toContain('SUM(blob_count)'); // Total blobs
+      expect(queryCall[0]).toContain('AVG(blob_base_fee)'); // Average blob fee
+      expect(queryCall[0]).toContain('AVG(excess_blob_gas)'); // Average excess
+      expect(queryCall[0]).toContain('MIN(block_number)'); // Block range
+      expect(queryCall[0]).toContain('MAX(block_number)'); // Block range
     });
 
     it('should return error for invalid time range', async () => {
