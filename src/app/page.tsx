@@ -95,46 +95,31 @@ export default function GasLimitMonitor() {
     return `Block: ${label}`;
   };
 
-  // Function to fill gaps in block sequence
-  // Calculate gas limit change statistics
-  const gasLimitStats = useMemo(() => {
-    if (data.length < 2) {
-      return { 
-        increases: 0, 
-        decreases: 0, 
-        unchanged: 0, 
-        totalComparisons: 0,
-        increasePercentage: 0,
-        decreasePercentage: 0,
-        unchangedPercentage: 0
-      };
-    }
+  // BPO1 upgrade countdown
+  const [bpo1Countdown, setBpo1Countdown] = useState<string>("");
 
-    let increases = 0;
-    let decreases = 0;
-    let unchanged = 0;
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const secondsUntilBPO1 = BPO1_UPGRADE_TIMESTAMP - now;
 
-    for (let i = 1; i < data.length; i++) {
-      const current = data[i].gasLimit;
-      const previous = data[i - 1].gasLimit;
+      if (secondsUntilBPO1 <= 0) {
+        setBpo1Countdown("BPO1 is live! 🎉");
+        return;
+      }
 
-      if (current > previous) increases++;
-      else if (current < previous) decreases++;
-      else unchanged++;
-    }
+      const days = Math.floor(secondsUntilBPO1 / 86400);
+      const hours = Math.floor((secondsUntilBPO1 % 86400) / 3600);
+      const minutes = Math.floor((secondsUntilBPO1 % 3600) / 60);
+      const seconds = secondsUntilBPO1 % 60;
 
-    const totalComparisons = data.length - 1;
-
-    return {
-      increases,
-      decreases,
-      unchanged,
-      totalComparisons,
-      increasePercentage: totalComparisons > 0 ? (increases / totalComparisons * 100) : 0,
-      decreasePercentage: totalComparisons > 0 ? (decreases / totalComparisons * 100) : 0,
-      unchangedPercentage: totalComparisons > 0 ? (unchanged / totalComparisons * 100) : 0
+      setBpo1Countdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
     };
-  }, [data]);
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Tab visibility detection and reconnection logic
   useEffect(() => {
@@ -1022,57 +1007,22 @@ export default function GasLimitMonitor() {
         </div>
       )}
 
-      {/* Gas Limit Change Statistics */}
+      {/* BPO1 Upgrade Countdown */}
       <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
         <CardContent>
-          {gasLimitStats.totalComparisons > 0 ? (
-            <>
-              <div className="flex justify-between items-baseline mb-3">
-              <h3 className="text-lg font-semibold">Gas Limit Changes</h3>
-              <div className="text-sm opacity-60">(Last {gasLimitStats.totalComparisons} blocks)</div>
+          <div className="text-center py-4">
+            <div className="text-4xl mb-3">🚀</div>
+            <h3 className="text-lg font-semibold mb-2">BPO1 Upgrade Countdown</h3>
+            <div className="text-3xl font-bold text-yellow-300 mb-2 tabular-nums">
+              {bpo1Countdown || "Loading..."}
             </div>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="flex flex-col">
-                  <div className="text-2xl font-bold text-green-400">
-                    {gasLimitStats.increasePercentage.toFixed(1)}%
-                  </div>
-                  <div className="text-sm opacity-80">
-                    ↗ Increases ({gasLimitStats.increases})
-                  </div>
-                </div>
-                <div className="flex flex-col">
-                  <div className="text-2xl font-bold text-red-400">
-                    {gasLimitStats.decreasePercentage.toFixed(1)}%
-                  </div>
-                  <div className="text-sm opacity-80">
-                    ↘ Decreases ({gasLimitStats.decreases})
-                  </div>
-                </div>
-                <div className="flex flex-col">
-                  <div className="text-2xl font-bold">
-                    {gasLimitStats.unchangedPercentage.toFixed(1)}%
-                  </div>
-                  <div className="text-sm opacity-80">
-                    → Unchanged ({gasLimitStats.unchanged})
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-6">
-              <div className="animate-pulse text-4xl mb-3">📊</div>
-              <h3 className="text-lg font-semibold mb-2">Gas Limit Statistics</h3>
-              <div className="text-sm opacity-70">
-                {data.length === 0
-                  ? "Waiting for first block..."
-                  : "Waiting for second block to calculate changes..."
-                }
-              </div>
-              <div className="text-xs opacity-50 mt-1">
-                Need at least 2 blocks to show statistics
-              </div>
+            <div className="text-sm opacity-70 mb-3">
+              Blob target: 6 → 10 | Max: 9 → 15
             </div>
-          )}
+            <div className="text-xs opacity-50">
+              Slot 13205504 • {new Date(BPO1_UPGRADE_TIMESTAMP * 1000).toLocaleString()}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
