@@ -1010,13 +1010,13 @@ export default function GasLimitMonitor() {
       {/* BPO1 Upgrade Countdown */}
       <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
         <CardContent>
-          <div className="text-center py-4">
-            <div className="text-4xl mb-3">🚀</div>
-            <h3 className="text-lg font-semibold mb-2">BPO1 Upgrade Countdown</h3>
-            <div className="text-3xl font-bold text-yellow-300 mb-2 tabular-nums">
+          <div className="text-center py-2">
+            <div className="text-2xl mb-1">🚀</div>
+            <h3 className="text-base font-semibold mb-1">BPO1 Upgrade Countdown</h3>
+            <div className="text-2xl font-bold text-yellow-300 mb-1 tabular-nums">
               {bpo1Countdown || "Loading..."}
             </div>
-            <div className="text-sm opacity-70 mb-3">
+            <div className="text-xs opacity-70 mb-1">
               Blob target: 6 → 10 | Max: 9 → 15
             </div>
             <div className="text-xs opacity-50">
