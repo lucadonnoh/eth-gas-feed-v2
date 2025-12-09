@@ -554,23 +554,24 @@ export default function GasLimitMonitor() {
     const chartData = sourceData.map(point => {
       // Floor blob base fee equivalent (in wei per blob gas)
       // This is what the blob base fee would need to be to match the execution floor cost
-      const floorBlobBaseFee = (BLOB_BASE_COST * point.baseFee) / GAS_PER_BLOB;
+      const floorBlobBaseFeeWei = (BLOB_BASE_COST * point.baseFee) / GAS_PER_BLOB;
 
-      // The actual blob base fee from congestion
-      const actualBlobBaseFee = point.blobBaseFee;
+      // The actual blob base fee from congestion (in wei)
+      const actualBlobBaseFeeWei = point.blobBaseFee;
 
       // For stacked bar: show floor component and congestion component
       // If actual > floor, congestion = actual - floor, floor stays as is
       // If actual <= floor, congestion = 0, floor = actual (since floor dominates but we show actual)
-      const floorComponent = Math.min(floorBlobBaseFee, actualBlobBaseFee);
-      const congestionComponent = Math.max(0, actualBlobBaseFee - floorBlobBaseFee);
+      const floorComponentWei = Math.min(floorBlobBaseFeeWei, actualBlobBaseFeeWei);
+      const congestionComponentWei = Math.max(0, actualBlobBaseFeeWei - floorBlobBaseFeeWei);
 
+      // Convert to Gwei for display
       return {
         ...point,
-        floorBlobBaseFee,
-        floorComponent,
-        congestionComponent,
-        totalBlobBaseFee: actualBlobBaseFee,
+        floorBlobBaseFee: floorBlobBaseFeeWei / 1e9,
+        floorComponent: floorComponentWei / 1e9,
+        congestionComponent: congestionComponentWei / 1e9,
+        totalBlobBaseFee: actualBlobBaseFeeWei / 1e9,
       };
     });
 
@@ -627,13 +628,14 @@ export default function GasLimitMonitor() {
                 domain={[0, yAxisMax]}
                 tick={{ fontSize: 10 }}
                 tickFormatter={(v) => {
-                  if (v >= 1e9) return `${(v / 1e9).toFixed(1)}G`;
-                  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
-                  if (v >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
-                  return v.toString();
+                  // Values are already in Gwei
+                  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+                  if (v >= 1) return v.toFixed(1);
+                  if (v >= 0.001) return v.toFixed(3);
+                  return v.toFixed(6);
                 }}
                 width={35}
-                label={{ value: "Blob Base Fee (wei)", angle: -90, position: "insideLeft", fill: "#39ff14", style: { fontSize: 10, opacity: 0.5 } }}
+                label={{ value: "Blob Base Fee (Gwei)", angle: -90, position: "insideLeft", fill: "#39ff14", style: { fontSize: 10, opacity: 0.5 } }}
               />
               <Tooltip
                 contentStyle={{ background: "#000", borderColor: "#39ff14" }}
@@ -642,11 +644,14 @@ export default function GasLimitMonitor() {
                   const isBucketed = !!props.payload?.blockRange;
                   const avgSuffix = isBucketed ? ' avg' : '';
 
+                  // Value is already in Gwei, format with appropriate precision
+                  const formattedValue = value >= 1 ? value.toFixed(3) : value.toFixed(6);
+
                   if (name === "Floor (Execution)") {
-                    return [`${value.toFixed(2)} wei${avgSuffix}`, "Floor"];
+                    return [`${formattedValue} Gwei${avgSuffix}`, "Floor"];
                   }
                   if (name === "Congestion") {
-                    return [`${value.toFixed(2)} wei${avgSuffix}`, "Congestion"];
+                    return [`${formattedValue} Gwei${avgSuffix}`, "Congestion"];
                   }
                   return [value.toString(), name];
                 }}
