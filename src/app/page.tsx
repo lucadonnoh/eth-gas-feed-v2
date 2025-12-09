@@ -779,37 +779,28 @@ export default function GasLimitMonitor() {
       if (latestBlockNumber === null) return;
 
       try {
-        const response = await fetch(`/api/blocks?after=${latestBlockNumber}&limit=50`);
+        // Re-fetch the entire 30m window to maintain rolling time-based window
+        const response = await fetch(`/api/blocks?timeRange=30m`);
         if (!response.ok) return;
 
         const { blocks: newBlocks, latestBlock } = await response.json();
 
         if (isMounted && newBlocks.length > 0) {
-          setData(prev => {
-            // Merge new blocks, avoiding duplicates
-            const existingBlockNumbers = new Set(prev.map(b => b.block));
-            const uniqueNewBlocks = newBlocks.filter((b: Point) => !existingBlockNumbers.has(b.block));
+          // Check if there are actually new blocks
+          const hasNewBlocks = latestBlock > latestBlockNumber;
 
-            if (uniqueNewBlocks.length === 0) return prev;
+          if (hasNewBlocks) {
+            setData(newBlocks);
+            latestBlockNumber = latestBlock;
 
-            // Combine old and new blocks
-            const combined = [...prev, ...uniqueNewBlocks];
+            const latestNewBlock = newBlocks[newBlocks.length - 1];
+            setLatest(latestNewBlock);
+            setLastBlockTime(Date.now());
+            setHasError(false);
 
-            // Keep a reasonable maximum to prevent unbounded growth
-            // For 30m we expect ~150 blocks, so keep last 200 as a buffer
-            const maxBlocks = 200;
-            return combined.slice(-maxBlocks);
-          });
-
-          latestBlockNumber = latestBlock;
-
-          const latestNewBlock = newBlocks[newBlocks.length - 1];
-          setLatest(latestNewBlock);
-          setLastBlockTime(Date.now());
-          setHasError(false);
-
-          // Fetch priority fees for the latest block
-          fetchPriorityFees(latestNewBlock.block);
+            // Fetch priority fees for the latest block
+            fetchPriorityFees(latestNewBlock.block);
+          }
         }
       } catch (err) {
         console.error("Error polling for blocks:", err);
