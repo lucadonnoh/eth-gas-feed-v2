@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { RollingNumber } from "@/components/RollingNumber";
 import { FlashValue } from "@/components/FlashValue";
+import { getBlobLimits, isBPO1ActiveAtTimestamp, BPO1_UPGRADE_TIMESTAMP } from "@/lib/eth";
 
 /**
  * Point represents a single Ethereum block entry for the chart & ticker.
@@ -377,9 +378,13 @@ export default function GasLimitMonitor() {
     // For bucketed data, blob count is SUM of all blobs in the bucket
     const isBucketed = timeRange !== '30m';
 
-    let targetLine = 6;   // Default: 6 blobs per block
-    let maxLine = 9;      // Default: 9 blobs per block
-    let yAxisMax = 10;    // Default Y-axis max
+    // Get current blob limits (will be 6/9 before Pectra, 10/15 after)
+    const currentLimits = getBlobLimits(Date.now() / 1000, false);
+    const { target, max } = currentLimits;
+
+    let targetLine = target;   // Dynamic: 6 or 10 blobs per block
+    let maxLine = max;         // Dynamic: 9 or 15 blobs per block
+    let yAxisMax = max + 1;    // Dynamic Y-axis max
 
     if (isBucketed) {
       // Calculate average blocks per bucket based on time range
@@ -388,8 +393,8 @@ export default function GasLimitMonitor() {
                              timeRange === '24h' ? 75 :   // 15 min / 12 sec
                              10;
 
-      targetLine = 6 * blocksPerBucket;
-      maxLine = 9 * blocksPerBucket;
+      targetLine = target * blocksPerBucket;
+      maxLine = max * blocksPerBucket;
       yAxisMax = Math.ceil(maxLine * 1.2); // 20% padding
     }
 
