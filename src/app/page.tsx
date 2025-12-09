@@ -31,6 +31,7 @@ type Point = {
   blobCount: number;
   blobBaseFee: number;
   excessBlobGas: number;
+  timestamp?: string; // Optional: ISO timestamp for individual blocks
   blockRange?: string; // Optional: "123-125" for bucketed data
   timestampRange?: string; // Optional: ISO timestamp range for bucketed data
   priorityFeeDistribution?: Array<{
@@ -67,8 +68,9 @@ export default function GasLimitMonitor() {
   // Custom label formatter for tooltips that shows timestamp range first, then block range (smaller)
   const tooltipLabelFormatter = (label: number | string, payload?: readonly unknown[]) => {
     const firstPayload = payload?.[0] as { payload?: Point } | undefined;
+
+    // For bucketed data with timestamp range
     if (firstPayload?.payload?.blockRange) {
-      // Add timestamp range if available (shown first)
       if (firstPayload?.payload?.timestampRange) {
         const [start, end] = firstPayload.payload.timestampRange.split(',');
         const formatTime = (iso: string) => {
@@ -80,7 +82,6 @@ export default function GasLimitMonitor() {
             hour12: false
           });
         };
-        // Use JSX to create proper line breaks
         return (
           <>
             {formatTime(start)} - {formatTime(end)}
@@ -92,6 +93,27 @@ export default function GasLimitMonitor() {
         return `Blocks: ${firstPayload.payload.blockRange}`;
       }
     }
+
+    // For individual blocks with timestamp (30m range)
+    if (firstPayload?.payload?.timestamp) {
+      const formatTime = (iso: string) => {
+        const date = new Date(iso);
+        return date.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+      };
+      return (
+        <>
+          {formatTime(firstPayload.payload.timestamp)}
+          <br />
+          (Block #{label})
+        </>
+      );
+    }
+
     return `Block: ${label}`;
   };
 

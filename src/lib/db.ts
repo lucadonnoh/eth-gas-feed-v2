@@ -32,6 +32,7 @@ export interface Block {
   blobCount: number;
   blobBaseFee: number;
   excessBlobGas: number;
+  timestamp?: string; // Optional: ISO timestamp for individual blocks
   blockRange?: string; // Optional: "123-125" for bucketed data
   timestampRange?: string; // Optional: ISO timestamp range for bucketed data
 }
@@ -46,6 +47,11 @@ export function rowToBlock(row: BlockRow): Block {
     ? `${row.min_timestamp.toISOString()},${row.max_timestamp.toISOString()}`
     : undefined;
 
+  // Include timestamp for individual blocks (non-bucketed data)
+  const timestamp = row.created_at && !blockRange
+    ? row.created_at.toISOString()
+    : undefined;
+
   return {
     block: Number(row.block_number),
     gasLimit: Number(row.gas_limit),
@@ -54,6 +60,7 @@ export function rowToBlock(row: BlockRow): Block {
     blobCount: Number(row.blob_count),
     blobBaseFee: Number(row.blob_base_fee),
     excessBlobGas: Number(row.excess_blob_gas),
+    ...(timestamp && { timestamp }),
     ...(blockRange && { blockRange }),
     ...(timestampRange && { timestampRange }),
   };
