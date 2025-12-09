@@ -10,10 +10,16 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// EIP-7691 Prague parameters for blob basefee calculation
+// EIP-7691 parameters for blob basefee calculation
+// Note: Parameter 5007716 is used for ALL blocks (both pre and post BPO1)
 const MIN_BASE_FEE_PER_BLOB_GAS = 1;
-const BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE = 5007716;
+const BLOB_BASE_FEE_UPDATE_FRACTION = 5007716;
 const BLOB_GAS_PER_BLOB = 131072;
+
+// BPO1 upgrade parameters
+const BPO1_UPGRADE_TIMESTAMP = 1765290071;
+const OLD_TARGET_BLOBS = 6;
+const NEW_TARGET_BLOBS = 10;
 
 // Fake exponential approximation from EIP-4844
 function fakeExponential(factor, numerator, denominator) {
@@ -30,12 +36,23 @@ function fakeExponential(factor, numerator, denominator) {
   return Math.floor(output / denominator);
 }
 
-// Calculate blob basefee using EIP-7691 parameters
-function calculateBlobBaseFee(excessBlobGas) {
+// Calculate blob basefee
+// Always uses parameter 5007716
+// Pre-BPO1: Use raw excess blob gas
+// Post-BPO1: Scale excess by old_target/new_target (6/10 = 0.6) due to target change
+function calculateBlobBaseFee(excessBlobGas, blockTimestamp) {
+  let effectiveExcess = excessBlobGas;
+
+  // After BPO1, scale excess by old target / new target (6/10 = 0.6)
+  const isBPO1Active = blockTimestamp && blockTimestamp >= BPO1_UPGRADE_TIMESTAMP;
+  if (isBPO1Active) {
+    effectiveExcess = Math.floor(excessBlobGas * OLD_TARGET_BLOBS / NEW_TARGET_BLOBS);
+  }
+
   return fakeExponential(
     MIN_BASE_FEE_PER_BLOB_GAS,
-    excessBlobGas,
-    BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE
+    effectiveExcess,
+    BLOB_BASE_FEE_UPDATE_FRACTION
   );
 }
 
@@ -44,10 +61,13 @@ async function insertBlock(block) {
   const blobCount = block.blobGasUsed
     ? Math.ceil(Number(block.blobGasUsed) / BLOB_GAS_PER_BLOB)
     : 0;
-  const blobBaseFee = calculateBlobBaseFee(excessBlobGas);
 
-  // Convert block timestamp to JS Date
-  const blockTimestamp = block.timestamp ? new Date(Number(block.timestamp) * 1000) : null;
+  // Convert block timestamp for blob base fee calculation
+  const blockTimestampUnix = block.timestamp ? Number(block.timestamp) : null;
+  const blobBaseFee = calculateBlobBaseFee(excessBlobGas, blockTimestampUnix);
+
+  // Convert block timestamp to JS Date for database
+  const blockTimestamp = blockTimestampUnix ? new Date(blockTimestampUnix * 1000) : null;
 
   const query = `
     INSERT INTO blocks (
