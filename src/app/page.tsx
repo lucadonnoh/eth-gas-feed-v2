@@ -586,13 +586,13 @@ export default function GasLimitMonitor() {
 
     // Round to nice numbers for Gwei values (typically 0.001 - 1000 Gwei)
     const getNiceNumber = (value: number) => {
-      if (value <= 0.01) return Math.ceil(value * 1000) / 1000;  // Round to 3 decimal places
-      if (value <= 0.1) return Math.ceil(value * 100) / 100;     // Round to 2 decimal places
-      if (value <= 1) return Math.ceil(value * 10) / 10;         // Round to 1 decimal place
-      if (value <= 10) return Math.ceil(value);                   // Round to whole number
-      if (value <= 100) return Math.ceil(value / 10) * 10;       // Round to nearest 10
-      if (value <= 1000) return Math.ceil(value / 100) * 100;    // Round to nearest 100
-      return Math.ceil(value / 1000) * 1000;                      // Round to nearest 1000
+      if (value <= 0.01) return Math.ceil(value * 1000) / 1000;  // Round to 3 decimal places (0.001 steps)
+      if (value <= 0.1) return Math.ceil(value * 100) / 100;     // Round to 2 decimal places (0.01 steps)
+      if (value <= 1) return Math.ceil(value * 20) / 20;         // Round to 0.05 steps (cleaner than 0.1)
+      if (value <= 10) return Math.ceil(value * 2) / 2;          // Round to 0.5 steps
+      if (value <= 100) return Math.ceil(value / 5) * 5;         // Round to nearest 5
+      if (value <= 1000) return Math.ceil(value / 50) * 50;      // Round to nearest 50
+      return Math.ceil(value / 500) * 500;                        // Round to nearest 500
     };
 
     const yAxisMax = getNiceNumber(maxBlobBaseFee * 1.2); // 20% padding with nice rounding
