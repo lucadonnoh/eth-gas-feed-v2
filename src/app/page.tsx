@@ -562,15 +562,15 @@ export default function GasLimitMonitor() {
 
     const maxBlobBaseFee = chartData.length > 0 ? Math.max(...chartData.map(d => d.totalBlobBaseFee)) : 1;
 
-    // Round to nice numbers to avoid floating point precision issues
+    // Round to nice numbers for Gwei values (typically 0.001 - 1000 Gwei)
     const getNiceNumber = (value: number) => {
-      if (value <= 10) return Math.ceil(value);
-      if (value <= 100) return Math.ceil(value / 10) * 10;
-      if (value <= 1000) return Math.ceil(value / 100) * 100;
-      if (value <= 10000) return Math.ceil(value / 1000) * 1000;
-      if (value <= 100000) return Math.ceil(value / 10000) * 10000;
-      if (value <= 1000000) return Math.ceil(value / 100000) * 100000;
-      return Math.ceil(value / 1000000) * 1000000;
+      if (value <= 0.01) return Math.ceil(value * 1000) / 1000;  // Round to 3 decimal places
+      if (value <= 0.1) return Math.ceil(value * 100) / 100;     // Round to 2 decimal places
+      if (value <= 1) return Math.ceil(value * 10) / 10;         // Round to 1 decimal place
+      if (value <= 10) return Math.ceil(value);                   // Round to whole number
+      if (value <= 100) return Math.ceil(value / 10) * 10;       // Round to nearest 10
+      if (value <= 1000) return Math.ceil(value / 100) * 100;    // Round to nearest 100
+      return Math.ceil(value / 1000) * 1000;                      // Round to nearest 1000
     };
 
     const yAxisMax = getNiceNumber(maxBlobBaseFee * 1.2); // 20% padding with nice rounding
@@ -578,7 +578,7 @@ export default function GasLimitMonitor() {
     return (
     <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
       <CardContent>
-        <h3 className="text-lg font-semibold mb-4">Blob Base Fee & Excess Blob Gas</h3>
+        <h3 className="text-lg font-semibold mb-4">Blob Base Fee</h3>
         <div className="flex gap-4 text-xs mb-2 opacity-80">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-[#22c55e]" style={{ opacity: 0.5 }}></div>
