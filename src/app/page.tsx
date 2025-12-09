@@ -665,9 +665,9 @@ export default function GasLimitMonitor() {
                 }}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]?.payload) {
-                    const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string; timestampRange?: string };
+                    const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string; timestampRange?: string; timestamp?: string };
 
-                    // Show timestamp range first (more important), then block range
+                    // Show timestamp range first (more important), then block range (for bucketed data)
                     if (p.timestampRange && p.blockRange) {
                       const [start, end] = p.timestampRange.split(',');
                       const formatTime = (iso: string) => {
@@ -679,7 +679,6 @@ export default function GasLimitMonitor() {
                           hour12: false
                         });
                       };
-                      // Use JSX to create proper line breaks
                       return (
                         <>
                           {formatTime(start)} - {formatTime(end)}
@@ -692,6 +691,26 @@ export default function GasLimitMonitor() {
                     // Fallback for bucketed data without timestamp
                     if (p.blockRange) {
                       return `Blocks: ${p.blockRange}`;
+                    }
+
+                    // For individual blocks with timestamp (30m range)
+                    if (p.timestamp) {
+                      const formatTime = (iso: string) => {
+                        const date = new Date(iso);
+                        return date.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: false
+                        });
+                      };
+                      return (
+                        <>
+                          {formatTime(p.timestamp)}
+                          <br />
+                          (Block #{label})
+                        </>
+                      );
                     }
                   }
                   return `Block #${label}`;
