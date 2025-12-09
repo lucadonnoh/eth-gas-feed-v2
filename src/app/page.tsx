@@ -638,10 +638,10 @@ export default function GasLimitMonitor() {
                   const avgSuffix = isBucketed ? ' avg' : '';
 
                   if (name === "Floor (Execution)") {
-                    return [`${(value / 1e9).toFixed(2)} Gwei${avgSuffix}`, "Floor"];
+                    return [`${(value / 1e9).toFixed(3)} Gwei${avgSuffix}`, "Floor"];
                   }
                   if (name === "Congestion") {
-                    return [`${(value / 1e9).toFixed(2)} Gwei${avgSuffix}`, "Congestion"];
+                    return [`${(value / 1e9).toFixed(3)} Gwei${avgSuffix}`, "Congestion"];
                   }
                   return [value.toString(), name];
                 }}
