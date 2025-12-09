@@ -614,6 +614,7 @@ export default function GasLimitMonitor() {
                 tick={{ fontSize: 10 }}
                 tickFormatter={(v) => {
                   // Values are already in Gwei
+                  if (v === 0) return '0';
                   if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
                   if (v >= 1) return v.toFixed(1);
                   if (v >= 0.001) return v.toFixed(3);
