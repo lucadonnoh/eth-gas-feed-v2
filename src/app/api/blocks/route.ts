@@ -80,8 +80,8 @@ export async function GET(request: Request) {
             SUM(gas_used) as gas_used,
             ROUND(AVG(base_fee)) as base_fee,
             SUM(blob_count) as blob_count,
-            ROUND(AVG(blob_base_fee)) as blob_base_fee,
-            ROUND(AVG(excess_blob_gas)) as excess_blob_gas,
+            AVG(blob_base_fee) as blob_base_fee,
+            AVG(excess_blob_gas) as excess_blob_gas,
             MAX(block_timestamp) as created_at
            FROM blocks
            WHERE block_timestamp IS NOT NULL
