@@ -62,32 +62,55 @@ export async function GET(request: Request) {
         );
       } else {
         // For 4h, 12h, 24h: aggregate blocks into time buckets
+        // IMPORTANT: Calculate congestion per-block BEFORE averaging
+        // This preserves congestion information that would be lost if we averaged
+        // blob_base_fee and base_fee separately (avg blob_base_fee could fall below avg floor)
+        //
         // Aggregation strategy:
         // - gas_limit: AVG (average limit)
         // - gas_used: SUM (total for ETH burned calculation)
-        // - base_fee: AVG (average fee level)
+        // - base_fee: AVG (average fee level) - for display/reference
         // - blob_count: SUM (total blobs in bucket)
-        // - blob_base_fee: AVG (average blob fee)
+        // - blob_base_fee: AVG of per-block congestion + AVG of base costs
         // - excess_blob_gas: AVG (average excess)
         result = await pool.query<BlockRow>(
-          `SELECT
+          `WITH block_components AS (
+            SELECT
+              floor(extract(epoch from block_timestamp) / ${bucketSeconds}) as time_bucket,
+              block_number,
+              block_timestamp,
+              gas_limit,
+              gas_used,
+              base_fee,
+              blob_count,
+              blob_base_fee,
+              excess_blob_gas,
+              -- Calculate per-block floor: (8192 * base_fee) / 131072
+              GREATEST(0, (8192.0 * base_fee / 131072.0)) as floor_blob_base_fee,
+              -- Calculate per-block congestion: max(0, blob_base_fee - floor)
+              GREATEST(0, blob_base_fee - (8192.0 * base_fee / 131072.0)) as congestion
+            FROM blocks
+            WHERE block_timestamp IS NOT NULL
+            AND block_timestamp >= NOW() - INTERVAL '${interval}'
+          )
+          SELECT
             MAX(block_number) as block_number,
             MIN(block_number) as min_block,
             MAX(block_number) as max_block,
-            to_timestamp(floor(extract(epoch from MIN(block_timestamp)) / ${bucketSeconds}) * ${bucketSeconds}) as min_timestamp,
-            to_timestamp((floor(extract(epoch from MIN(block_timestamp)) / ${bucketSeconds}) + 1) * ${bucketSeconds}) as max_timestamp,
+            to_timestamp(MIN(time_bucket) * ${bucketSeconds}) as min_timestamp,
+            to_timestamp((MIN(time_bucket) + 1) * ${bucketSeconds}) as max_timestamp,
             ROUND(AVG(gas_limit)) as gas_limit,
             SUM(gas_used) as gas_used,
             ROUND(AVG(base_fee)) as base_fee,
             SUM(blob_count) as blob_count,
-            AVG(blob_base_fee) as blob_base_fee,
+            -- Reconstruct blob_base_fee as: avg(floor) + avg(congestion)
+            -- This preserves congestion information across aggregation
+            AVG(floor_blob_base_fee) + AVG(congestion) as blob_base_fee,
             AVG(excess_blob_gas) as excess_blob_gas,
             MAX(block_timestamp) as created_at
-           FROM blocks
-           WHERE block_timestamp IS NOT NULL
-           AND block_timestamp >= NOW() - INTERVAL '${interval}'
-           GROUP BY floor(extract(epoch from block_timestamp) / ${bucketSeconds})
-           ORDER BY MAX(block_number) ASC`,
+          FROM block_components
+          GROUP BY time_bucket
+          ORDER BY MAX(block_number) ASC`,
           []
         );
       }
