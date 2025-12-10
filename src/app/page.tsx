@@ -994,9 +994,9 @@ export default function GasLimitMonitor() {
       </div>
 
       {isConnecting && (
-        <div className="flex items-center gap-2 text-lg">
+        <div className="flex items-center gap-2 text-lg" suppressHydrationWarning>
           <div className="animate-spin text-2xl inline-block">●</div>
-          <span>Connecting to Ethereum network...</span>
+          <span suppressHydrationWarning>Connecting to Ethereum network...</span>
         </div>
       )}
 
