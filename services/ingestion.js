@@ -5,6 +5,13 @@ if (process.env.NODE_ENV !== 'production') {
 const { ethers } = require('ethers');
 const { Pool } = require('pg');
 
+// Structured logging with timestamps
+function log(level, message, context = {}) {
+  const timestamp = new Date().toISOString();
+  const contextStr = Object.keys(context).length > 0 ? ` ${JSON.stringify(context)}` : '';
+  console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}${contextStr}`);
+}
+
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -90,63 +97,142 @@ async function insertBlock(block) {
 
   try {
     await pool.query(query, values);
-    console.log(`✓ Block ${block.number} inserted`);
+    log('info', 'Block inserted', { blockNumber: block.number });
   } catch (err) {
-    console.error(`Error inserting block ${block.number}:`, err.message);
+    log('error', 'Failed to insert block', { blockNumber: block.number, error: err.message });
   }
 }
 
 async function cleanupOldBlocks() {
   try {
+    log('info', 'Starting cleanup of old blocks');
     const result = await pool.query(`
       DELETE FROM blocks
       WHERE created_at < NOW() - INTERVAL '24 hours'
     `);
     if (result.rowCount > 0) {
-      console.log(`🧹 Cleaned up ${result.rowCount} old blocks`);
+      log('info', 'Cleanup completed', { deletedBlocks: result.rowCount });
+    } else {
+      log('info', 'Cleanup completed', { deletedBlocks: 0 });
     }
   } catch (err) {
-    console.error('Error cleaning up old blocks:', err.message);
+    log('error', 'Cleanup failed', { error: err.message });
   }
 }
 
 async function backfillMissingBlocks(provider, fromBlock, toBlock) {
-  console.log(`📦 Backfilling blocks ${fromBlock} to ${toBlock}`);
+  const totalBlocks = toBlock - fromBlock + 1;
+  log('info', 'Starting backfill', { fromBlock, toBlock, totalBlocks });
 
   const blockNumbers = [];
   for (let i = fromBlock; i <= toBlock; i++) {
     blockNumbers.push(i);
   }
 
-  // Batch fetch blocks
-  const blocks = await Promise.all(
-    blockNumbers.map(num => provider.getBlock(num).catch(() => null))
-  );
+  // Batch fetch blocks in chunks to avoid overwhelming RPC
+  const chunkSize = 50;
+  for (let i = 0; i < blockNumbers.length; i += chunkSize) {
+    const chunk = blockNumbers.slice(i, i + chunkSize);
+    log('info', 'Fetching block chunk', {
+      chunkStart: chunk[0],
+      chunkEnd: chunk[chunk.length - 1],
+      progress: `${Math.min(i + chunkSize, blockNumbers.length)}/${blockNumbers.length}`
+    });
 
-  for (const block of blocks) {
-    if (block) {
-      await insertBlock(block);
+    const blocks = await Promise.all(
+      chunk.map(num => provider.getBlock(num).catch(err => {
+        log('warn', 'Failed to fetch block', { blockNumber: num, error: err.message });
+        return null;
+      }))
+    );
+
+    for (const block of blocks) {
+      if (block) {
+        await insertBlock(block);
+      }
     }
   }
+
+  log('info', 'Backfill completed', { totalBlocks });
+}
+
+// Track last successful block insert for heartbeat monitoring
+let lastBlockTimestamp = Date.now();
+let isReconnecting = false;
+
+async function setupWebSocketConnection() {
+  if (isReconnecting) {
+    log('warn', 'Reconnection already in progress, skipping');
+    return null;
+  }
+
+  const wsUrl = process.env.ETH_WS_RPC_URL || 'wss://ethereum-rpc.publicnode.com';
+  log('info', 'Connecting to WebSocket', { url: wsUrl });
+
+  const provider = new ethers.WebSocketProvider(wsUrl);
+
+  // WebSocket error handlers
+  provider.websocket.on('error', (error) => {
+    log('error', 'WebSocket error', { error: error.message });
+  });
+
+  provider.websocket.on('close', (code, reason) => {
+    log('warn', 'WebSocket closed', { code, reason: reason.toString() });
+    if (!isReconnecting) {
+      log('info', 'Scheduling reconnection in 5 seconds');
+      isReconnecting = true;
+      setTimeout(async () => {
+        isReconnecting = false;
+        log('info', 'Attempting to reconnect');
+        await main();
+      }, 5000);
+    }
+  });
+
+  provider.websocket.on('open', () => {
+    log('info', 'WebSocket connection established');
+  });
+
+  return provider;
+}
+
+// Heartbeat monitor: detect if we haven't processed blocks in 5 minutes
+function startHeartbeatMonitor() {
+  setInterval(() => {
+    const timeSinceLastBlock = Date.now() - lastBlockTimestamp;
+    const minutesSinceLastBlock = Math.floor(timeSinceLastBlock / 60000);
+
+    if (minutesSinceLastBlock >= 5) {
+      log('error', 'Heartbeat failure: No blocks processed', {
+        minutesSinceLastBlock,
+        lastBlockTimestamp: new Date(lastBlockTimestamp).toISOString()
+      });
+      log('warn', 'Forcing process restart due to heartbeat failure');
+      process.exit(1); // Railway will restart us
+    } else {
+      log('debug', 'Heartbeat check passed', { minutesSinceLastBlock });
+    }
+  }, 60000); // Check every minute
 }
 
 async function main() {
-  console.log('🚀 Starting Ethereum block ingestion service...');
+  log('info', 'Starting Ethereum block ingestion service');
 
   // Initialize database
   try {
     await pool.query('SELECT 1');
-    console.log('✓ Database connected');
+    log('info', 'Database connected');
   } catch (err) {
-    console.error('❌ Database connection failed:', err.message);
+    log('error', 'Database connection failed', { error: err.message });
     process.exit(1);
   }
 
-  // Setup WebSocket provider
-  const wsUrl = process.env.ETH_WS_RPC_URL || 'wss://ethereum-rpc.publicnode.com';
-  console.log(`🔌 Connecting to ${wsUrl}`);
-
-  const provider = new ethers.WebSocketProvider(wsUrl);
+  // Setup WebSocket provider with error handling
+  const provider = await setupWebSocketConnection();
+  if (!provider) {
+    log('error', 'Failed to setup WebSocket connection');
+    return;
+  }
 
   // Get latest block in database
   let lastDbBlock = null;
@@ -154,15 +240,15 @@ async function main() {
     const result = await pool.query('SELECT block_number FROM blocks ORDER BY block_number DESC LIMIT 1');
     if (result.rows.length > 0) {
       lastDbBlock = Number(result.rows[0].block_number);
-      console.log(`📊 Latest block in DB: ${lastDbBlock}`);
+      log('info', 'Latest block in database', { blockNumber: lastDbBlock });
     }
   } catch (err) {
-    console.log('📊 No blocks in database yet');
+    log('info', 'No blocks in database yet');
   }
 
   // Get current chain block
   const currentBlock = await provider.getBlockNumber();
-  console.log(`⛓️  Current chain block: ${currentBlock}`);
+  log('info', 'Current chain block', { blockNumber: currentBlock });
 
   // Backfill if needed (limit to last 110 blocks)
   if (lastDbBlock) {
@@ -179,15 +265,20 @@ async function main() {
   // Listen for new blocks
   provider.on('block', async (blockNumber) => {
     try {
-      console.log(`📦 New block: ${blockNumber}`);
+      log('info', 'New block received', { blockNumber });
       const block = await provider.getBlock(blockNumber);
       if (block) {
         await insertBlock(block);
+        lastBlockTimestamp = Date.now(); // Update heartbeat
       }
     } catch (err) {
-      console.error(`Error processing block ${blockNumber}:`, err.message);
+      log('error', 'Error processing block', { blockNumber, error: err.message });
     }
   });
+
+  // Start heartbeat monitor
+  startHeartbeatMonitor();
+  log('info', 'Heartbeat monitor started');
 
   // Cleanup old blocks on startup and then every hour
   await cleanupOldBlocks();
@@ -195,16 +286,16 @@ async function main() {
 
   // Handle graceful shutdown
   process.on('SIGTERM', async () => {
-    console.log('🛑 Shutting down gracefully...');
+    log('info', 'Received SIGTERM, shutting down gracefully');
     provider.destroy();
     await pool.end();
     process.exit(0);
   });
 
-  console.log('✅ Ingestion service running');
+  log('info', 'Ingestion service running successfully');
 }
 
 main().catch((err) => {
-  console.error('❌ Fatal error:', err);
+  log('error', 'Fatal error in main', { error: err.message, stack: err.stack });
   process.exit(1);
 });
