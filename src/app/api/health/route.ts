@@ -41,7 +41,22 @@ export async function GET() {
     const stats = statsResult.rows[0];
     const gaps = gapsResult.rows[0];
 
-    const health = {
+    const health: {
+      status: 'ok' | 'warning' | 'error';
+      database: {
+        totalBlocks: number;
+        oldestBlock: number;
+        latestBlock: number;
+        lastInsertTime: string;
+        secondsSinceLastInsert: number;
+      };
+      gaps: {
+        count: number;
+        totalMissingBlocks: number;
+        details: any[];
+      };
+      warnings: string[];
+    } = {
       status: 'ok',
       database: {
         totalBlocks: Number(stats.total_blocks),
