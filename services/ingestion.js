@@ -156,6 +156,62 @@ async function backfillMissingBlocks(provider, fromBlock, toBlock) {
   log('info', 'Backfill completed', { totalBlocks });
 }
 
+// Check for and backfill all gaps in the database
+async function detectAndBackfillGaps(provider) {
+  try {
+    log('info', 'Checking for gaps in database');
+
+    // Query to find all gaps
+    const gapsResult = await pool.query(`
+      WITH block_sequence AS (
+        SELECT
+          block_number,
+          block_number - LAG(block_number) OVER (ORDER BY block_number) as gap_size
+        FROM blocks
+        ORDER BY block_number
+      )
+      SELECT
+        block_number - gap_size as after_block,
+        block_number as before_block,
+        gap_size - 1 as missing_count
+      FROM block_sequence
+      WHERE gap_size > 1
+      ORDER BY block_number
+    `);
+
+    const gaps = gapsResult.rows;
+
+    if (gaps.length === 0) {
+      log('info', 'No gaps found in database');
+      return;
+    }
+
+    const totalMissing = gaps.reduce((sum, gap) => sum + Number(gap.missing_count), 0);
+    log('info', 'Gaps detected', { gapCount: gaps.length, totalMissingBlocks: totalMissing });
+
+    // Backfill each gap
+    for (let i = 0; i < gaps.length; i++) {
+      const gap = gaps[i];
+      const fromBlock = Number(gap.after_block) + 1;
+      const toBlock = Number(gap.before_block) - 1;
+
+      log('info', 'Backfilling gap', {
+        gapNumber: i + 1,
+        totalGaps: gaps.length,
+        fromBlock,
+        toBlock,
+        missingCount: gap.missing_count
+      });
+
+      await backfillMissingBlocks(provider, fromBlock, toBlock);
+    }
+
+    log('info', 'All gaps backfilled successfully', { totalGaps: gaps.length, totalMissing });
+  } catch (err) {
+    log('error', 'Failed to detect/backfill gaps', { error: err.message });
+  }
+}
+
 // Track last successful block insert for heartbeat monitoring
 let lastBlockTimestamp = Date.now();
 let isReconnecting = false;
@@ -250,7 +306,10 @@ async function main() {
   const currentBlock = await provider.getBlockNumber();
   log('info', 'Current chain block', { blockNumber: currentBlock });
 
-  // Backfill if needed (limit to last 110 blocks)
+  // Check for and backfill any gaps in the database
+  await detectAndBackfillGaps(provider);
+
+  // Backfill recent blocks (limit to last 110 blocks)
   if (lastDbBlock) {
     const startBlock = Math.max(lastDbBlock + 1, currentBlock - 109);
     if (startBlock <= currentBlock) {
