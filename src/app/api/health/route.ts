@@ -41,6 +41,12 @@ export async function GET() {
     const stats = statsResult.rows[0];
     const gaps = gapsResult.rows[0];
 
+    interface GapDetail {
+      after_block: number;
+      before_block: number;
+      missing_count: number;
+    }
+
     const health: {
       status: 'ok' | 'warning' | 'error';
       database: {
@@ -53,7 +59,7 @@ export async function GET() {
       gaps: {
         count: number;
         totalMissingBlocks: number;
-        details: any[];
+        details: GapDetail[];
       };
       warnings: string[];
     } = {
