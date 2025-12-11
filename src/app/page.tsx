@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   LineChart,
   Line,
@@ -143,45 +143,60 @@ export default function GasLimitMonitor() {
     return () => clearInterval(interval);
   }, []);
 
+  // Refetch data without full page reload
+  const refetchData = useCallback(async () => {
+    try {
+      setIsConnecting(true);
+      const response = await fetch(`/api/blocks?timeRange=${timeRange}`);
+      if (response.ok) {
+        const { blocks, latestBlock } = await response.json();
+        if (blocks.length > 0) {
+          setData(blocks);
+          const latestBlockData = blocks[blocks.length - 1];
+          setLatest(latestBlockData);
+          setLastBlockTime(Date.now());
+          setHasError(false);
+        }
+      }
+    } catch (err) {
+      console.error("Error refetching data:", err);
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [timeRange]);
+
   // Tab visibility detection and reconnection logic
   useEffect(() => {
     const handleVisibilityChange = () => {
       const isVisible = !document.hidden;
       setIsTabVisible(isVisible);
-      
+
       if (isVisible && lastBlockTime > 0) {
         // Tab became visible - check if we need to reconnect
         const timeSinceLastBlock = Date.now() - lastBlockTime;
-        
+
         // If more than 30 seconds without a block, try to recover
         if (timeSinceLastBlock > 30000) {
-          console.log("Tab returned, checking connection health...");
-          
+          console.log("Tab returned, refetching data...");
+
           if (hasError) {
             // Clear error and attempt reconnection
             setHasError(false);
-            setIsConnecting(true);
-            window.location.reload();
+            refetchData();
           } else if (timeSinceLastBlock > 60000) {
-            // Been away too long, show reconnecting state
-            setIsConnecting(true);
-            // Give it 10 seconds to recover, then reload if needed
-            setTimeout(() => {
-              if (Date.now() - lastBlockTime > 70000) {
-                window.location.reload();
-              }
-            }, 10000);
+            // Been away too long, refetch data
+            refetchData();
           }
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [lastBlockTime, hasError]);
+  }, [lastBlockTime, hasError, refetchData]);
 
   // Memoize charts to prevent re-renders from timeToNext updates
   const gasLimitChartComponent = useMemo(() => {
@@ -244,8 +259,7 @@ export default function GasLimitMonitor() {
                 dataKey="gasLimit"
                 stroke="#39ff14"
                 dot={{ fill: "#39ff14", strokeWidth: 0, r: 2 }}
-                isAnimationActive={true}
-                animationDuration={0}
+                isAnimationActive={false}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -333,8 +347,7 @@ export default function GasLimitMonitor() {
                 fillOpacity={0.3}
                 stroke="none"
                 name="ETH Burned"
-                isAnimationActive={true}
-                animationDuration={0}
+                isAnimationActive={false}
               />
               <Line
                 yAxisId="left"
@@ -343,8 +356,7 @@ export default function GasLimitMonitor() {
                 stroke="#ffa500"
                 strokeWidth={2}
                 dot={{ fill: "#ffa500", strokeWidth: 0, r: 2 }}
-                isAnimationActive={true}
-                animationDuration={0}
+                isAnimationActive={false}
                 name="Base Fee"
               />
             </ComposedChart>
@@ -379,6 +391,11 @@ export default function GasLimitMonitor() {
 
     return dataWithAvg;
   }, [data, timeRange]);
+
+  // Memoize ticker data to avoid recalculating on every render
+  const tickerData = useMemo(() => {
+    return data.slice(-30).slice().reverse();
+  }, [data]);
 
   const blobCountChartComponent = useMemo(() => {
     // Calculate reference lines based on bucketing
@@ -467,8 +484,7 @@ export default function GasLimitMonitor() {
                 fillOpacity={0.3}
                 stroke="none"
                 name="Blob Count"
-                isAnimationActive={true}
-                animationDuration={0}
+                isAnimationActive={false}
               />
               <Line
                 type="monotone"
@@ -724,8 +740,7 @@ export default function GasLimitMonitor() {
                 stroke="none"
                 name="Floor (Execution)"
                 stackId="blobFee"
-                isAnimationActive={true}
-                animationDuration={0}
+                isAnimationActive={false}
               />
               <Bar
                 yAxisId="left"
@@ -735,8 +750,7 @@ export default function GasLimitMonitor() {
                 stroke="none"
                 name="Congestion"
                 stackId="blobFee"
-                isAnimationActive={true}
-                animationDuration={0}
+                isAnimationActive={false}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -1101,12 +1115,8 @@ export default function GasLimitMonitor() {
             </div>
           ) : (
             <AnimatePresence initial={false}>
-              {data
-                .slice(-100)
-                .slice()
-                .reverse()
-                .map((entry, index) => {
-                  const previousEntry = data.slice(-100).slice().reverse()[index + 1];
+              {tickerData.map((entry, index) => {
+                  const previousEntry = tickerData[index + 1];
                   const isIncrease = previousEntry && entry.gasLimit > previousEntry.gasLimit;
                   const isDecrease = previousEntry && entry.gasLimit < previousEntry.gasLimit;
                   const isFirst = !previousEntry;

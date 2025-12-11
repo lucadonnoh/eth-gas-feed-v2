@@ -7,14 +7,14 @@ jest.mock('@/lib/db', () => ({
     query: jest.fn(),
   },
   rowToBlock: (row: BlockRow) => ({
-    blockNumber: Number(row.block_number),
+    block: Number(row.block_number),
     gasLimit: Number(row.gas_limit),
     gasUsed: Number(row.gas_used),
     baseFee: Number(row.base_fee),
     blobCount: Number(row.blob_count),
     blobBaseFee: Number(row.blob_base_fee),
     excessBlobGas: Number(row.excess_blob_gas),
-    timestamp: row.created_at,
+    timestamp: row.created_at?.toISOString(),
   }),
 }));
 
@@ -38,9 +38,7 @@ describe('/api/blocks', () => {
         },
       ];
 
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: mockBlocks }) // Main query
-        .mockResolvedValueOnce({ rows: [{ block_number: '100' }] }); // Latest block query
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: mockBlocks });
 
       const request = new Request('http://localhost:3000/api/blocks');
       const response = await GET(request);
@@ -48,7 +46,8 @@ describe('/api/blocks', () => {
 
       expect(response.status).toBe(200);
       expect(data.blocks).toHaveLength(1);
-      expect(data.blocks[0].blockNumber).toBe(100);
+      expect(data.blocks[0].block).toBe(100);
+      // latestBlock is now derived from result set, not a separate query
       expect(data.latestBlock).toBe(100);
     });
   });
@@ -67,9 +66,7 @@ describe('/api/blocks', () => {
         block_timestamp: new Date(),
       }));
 
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: mockBlocks }) // All blocks query
-        .mockResolvedValueOnce({ rows: [{ block_number: '1150' }] }); // Latest block query
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: mockBlocks });
 
       const request = new Request('http://localhost:3000/api/blocks?timeRange=30m');
       const response = await GET(request);
@@ -77,6 +74,8 @@ describe('/api/blocks', () => {
 
       expect(response.status).toBe(200);
       expect(data.blocks.length).toBe(150); // All blocks for 30m (~150)
+      // latestBlock is now derived from result set (max block number)
+      expect(data.latestBlock).toBe(1149);
 
       // Verify the query does NOT use bucketing for 30m
       const queryCall = (pool.query as jest.Mock).mock.calls[0];
@@ -100,9 +99,7 @@ describe('/api/blocks', () => {
         created_at: new Date(),
       }));
 
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: mockBucketedBlocks })
-        .mockResolvedValueOnce({ rows: [{ block_number: '2120' }] });
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: mockBucketedBlocks });
 
       const request = new Request('http://localhost:3000/api/blocks?timeRange=4h');
       const response = await GET(request);
@@ -117,7 +114,9 @@ describe('/api/blocks', () => {
       expect(queryCall[0]).toContain('SUM(gas_used)'); // Total gas used
       expect(queryCall[0]).toContain('AVG(base_fee)'); // Average fee
       expect(queryCall[0]).toContain('SUM(blob_count)'); // Total blobs
-      expect(queryCall[0]).toContain('AVG(blob_base_fee)'); // Average blob fee
+      // Blob fee uses a complex calculation: avg(floor) + avg(congestion)
+      expect(queryCall[0]).toContain('AVG(floor_blob_base_fee)'); // Average floor component
+      expect(queryCall[0]).toContain('AVG(congestion)'); // Average congestion component
       expect(queryCall[0]).toContain('AVG(excess_blob_gas)'); // Average excess
       expect(queryCall[0]).toContain('MIN(block_number)'); // Block range
       expect(queryCall[0]).toContain('MAX(block_number)'); // Block range
@@ -133,9 +132,7 @@ describe('/api/blocks', () => {
     });
 
     it('should only query blocks with timestamps', async () => {
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [{ block_number: '1000' }] });
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [] });
 
       const request = new Request('http://localhost:3000/api/blocks?timeRange=30m');
       await GET(request);
@@ -160,16 +157,14 @@ describe('/api/blocks', () => {
         },
       ];
 
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: mockBlocks })
-        .mockResolvedValueOnce({ rows: [{ block_number: '101' }] });
+      (pool.query as jest.Mock).mockResolvedValueOnce({ rows: mockBlocks });
 
       const request = new Request('http://localhost:3000/api/blocks?after=100&limit=50');
       const response = await GET(request);
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.blocks[0].blockNumber).toBe(101);
+      expect(data.blocks[0].block).toBe(101);
 
       const queryCall = (pool.query as jest.Mock).mock.calls[0];
       expect(queryCall[0]).toContain('WHERE block_number > $1');

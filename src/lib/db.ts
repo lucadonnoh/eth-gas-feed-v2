@@ -1,8 +1,17 @@
 import { Pool } from 'pg';
 
-// Create a connection pool
+// Create a connection pool with resilience settings
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // Connection pool settings
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+
+// Handle pool errors to prevent crashes
+pool.on('error', (err) => {
+  console.error('Unexpected database pool error:', err.message);
 });
 
 export { pool };

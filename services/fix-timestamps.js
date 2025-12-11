@@ -1,72 +1,75 @@
-// Load .env.local for local development only
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config({ path: '.env.local' });
-}
-const { Pool } = require('pg');
+/**
+ * Timestamp Fix Service
+ * Fetches and updates missing block timestamps from the Ethereum chain
+ */
+
 const { ethers } = require('ethers');
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-const rpcUrl = process.env.ETH_RPC_URL || 'https://ethereum-rpc.publicnode.com';
-const provider = new ethers.JsonRpcProvider(rpcUrl);
+const { log, queryWithRetry, closePool } = require('./lib');
 
 async function fixMissingTimestamps() {
-  console.log('🔍 Finding blocks with missing timestamps...');
+  log('info', 'Finding blocks with missing timestamps');
 
-  const result = await pool.query(
+  const rpcUrl = process.env.HTTPS_ETH_RPC_URL || 'https://ethereum-rpc.publicnode.com';
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+  const result = await queryWithRetry(
     'SELECT block_number FROM blocks WHERE block_timestamp IS NULL ORDER BY block_number ASC'
   );
 
   const blocksToFix = result.rows;
-  console.log(`📊 Found ${blocksToFix.length} blocks with missing timestamps`);
+  log('info', 'Blocks with missing timestamps', { count: blocksToFix.length });
 
   if (blocksToFix.length === 0) {
-    console.log('✅ All blocks have timestamps!');
+    log('info', 'All blocks have timestamps');
     return;
   }
+
+  let fixed = 0;
+  let errors = 0;
 
   for (const row of blocksToFix) {
     const blockNumber = Number(row.block_number);
 
     try {
-      // Fetch block from Ethereum
       const block = await provider.getBlock(blockNumber);
 
       if (!block) {
-        console.log(`⚠️  Block ${blockNumber} not found on chain`);
+        log('warn', 'Block not found on chain', { blockNumber });
+        errors++;
         continue;
       }
 
       const blockTimestamp = new Date(Number(block.timestamp) * 1000);
 
-      // Update the database
-      await pool.query(
+      await queryWithRetry(
         'UPDATE blocks SET block_timestamp = $1 WHERE block_number = $2',
         [blockTimestamp, blockNumber]
       );
 
-      console.log(`✓ Updated block ${blockNumber} with timestamp ${blockTimestamp.toISOString()}`);
+      log('info', 'Block timestamp updated', {
+        blockNumber,
+        timestamp: blockTimestamp.toISOString()
+      });
+      fixed++;
 
       // Small delay to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, 100));
-
     } catch (err) {
-      console.error(`❌ Error fixing block ${blockNumber}:`, err.message);
+      log('error', 'Error fixing block', { blockNumber, error: err.message });
+      errors++;
     }
   }
 
-  console.log('✅ Timestamp fix complete!');
+  log('info', 'Timestamp fix complete', { fixed, errors });
 }
 
 fixMissingTimestamps()
-  .then(() => {
-    pool.end();
+  .then(async () => {
+    await closePool();
     process.exit(0);
   })
-  .catch((err) => {
-    console.error('Fatal error:', err);
-    pool.end();
+  .catch(async (err) => {
+    log('error', 'Fatal error', { error: err.message });
+    await closePool();
     process.exit(1);
   });

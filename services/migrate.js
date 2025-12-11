@@ -1,15 +1,14 @@
-// Load .env.local for local development only
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config({ path: '.env.local' });
-}
-const { Pool } = require('pg');
+/**
+ * Database Migration Service
+ * Creates the blocks table and required indexes
+ */
+
+const { log, getPool, closePool } = require('./lib');
 
 async function migrate() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  });
+  log('info', 'Running database migrations');
 
-  console.log('🔄 Running database migrations...');
+  const pool = getPool();
 
   try {
     await pool.query(`
@@ -25,32 +24,32 @@ async function migrate() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
-    console.log('✓ Table "blocks" created');
+    log('info', 'Table "blocks" created or verified');
 
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_blocks_created_at
       ON blocks (created_at DESC);
     `);
-    console.log('✓ Index "idx_blocks_created_at" created');
+    log('info', 'Index "idx_blocks_created_at" created or verified');
 
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_blocks_block_number_desc
       ON blocks (block_number DESC);
     `);
-    console.log('✓ Index "idx_blocks_block_number_desc" created');
+    log('info', 'Index "idx_blocks_block_number_desc" created or verified');
 
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_blocks_block_timestamp
       ON blocks (block_timestamp DESC);
     `);
-    console.log('✓ Index "idx_blocks_block_timestamp" created');
+    log('info', 'Index "idx_blocks_block_timestamp" created or verified');
 
-    console.log('✅ Migration complete!');
-    await pool.end();
+    log('info', 'Migration complete');
+    await closePool();
     process.exit(0);
   } catch (err) {
-    console.error('❌ Migration failed:', err);
-    await pool.end();
+    log('error', 'Migration failed', { error: err.message, stack: err.stack });
+    await closePool();
     process.exit(1);
   }
 }

@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 
+// Cache for gap detection (expensive query)
+let gapCache: {
+  data: { count: number; totalMissingBlocks: number; details: unknown[] } | null;
+  timestamp: number;
+} = { data: null, timestamp: 0 };
+const GAP_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function GET() {
   try {
-    // Get database stats
+    // Get database stats (lightweight query)
     const statsResult = await pool.query(`
       SELECT
         COUNT(*) as total_blocks,
@@ -14,32 +21,50 @@ export async function GET() {
       FROM blocks
     `);
 
-    // Check for gaps in recent blocks (last 1000)
-    const gapsResult = await pool.query(`
-      WITH block_sequence AS (
-        SELECT
-          block_number,
-          block_number - LAG(block_number) OVER (ORDER BY block_number) as gap_size
-        FROM blocks
-        ORDER BY block_number DESC
-        LIMIT 1000
-      )
-      SELECT
-        COUNT(*) FILTER (WHERE gap_size > 1) as gap_count,
-        SUM(gap_size - 1) FILTER (WHERE gap_size > 1) as total_missing_blocks,
-        jsonb_agg(
-          jsonb_build_object(
-            'after_block', block_number - gap_size,
-            'before_block', block_number,
-            'missing_count', gap_size - 1
-          ) ORDER BY block_number DESC
-        ) FILTER (WHERE gap_size > 1) as gaps
-      FROM block_sequence
-      WHERE gap_size IS NOT NULL
-    `);
-
     const stats = statsResult.rows[0];
-    const gaps = gapsResult.rows[0];
+
+    // Check for gaps in recent blocks (cached - expensive query)
+    const now = Date.now();
+    let gaps: { count: number; totalMissingBlocks: number; details: unknown[] };
+
+    if (gapCache.data && (now - gapCache.timestamp) < GAP_CACHE_TTL_MS) {
+      // Use cached gap data
+      gaps = gapCache.data;
+    } else {
+      // Fetch fresh gap data
+      const gapsResult = await pool.query(`
+        WITH block_sequence AS (
+          SELECT
+            block_number,
+            block_number - LAG(block_number) OVER (ORDER BY block_number) as gap_size
+          FROM blocks
+          ORDER BY block_number DESC
+          LIMIT 1000
+        )
+        SELECT
+          COUNT(*) FILTER (WHERE gap_size > 1) as gap_count,
+          SUM(gap_size - 1) FILTER (WHERE gap_size > 1) as total_missing_blocks,
+          jsonb_agg(
+            jsonb_build_object(
+              'after_block', block_number - gap_size,
+              'before_block', block_number,
+              'missing_count', gap_size - 1
+            ) ORDER BY block_number DESC
+          ) FILTER (WHERE gap_size > 1) as gaps
+        FROM block_sequence
+        WHERE gap_size IS NOT NULL
+      `);
+
+      const gapData = gapsResult.rows[0];
+      gaps = {
+        count: Number(gapData.gap_count || 0),
+        totalMissingBlocks: Number(gapData.total_missing_blocks || 0),
+        details: gapData.gaps || [],
+      };
+
+      // Update cache
+      gapCache = { data: gaps, timestamp: now };
+    }
 
     interface GapDetail {
       after_block: number;
@@ -72,9 +97,9 @@ export async function GET() {
         secondsSinceLastInsert: Math.floor(Number(stats.seconds_since_last_insert)),
       },
       gaps: {
-        count: Number(gaps.gap_count || 0),
-        totalMissingBlocks: Number(gaps.total_missing_blocks || 0),
-        details: gaps.gaps || [],
+        count: gaps.count,
+        totalMissingBlocks: gaps.totalMissingBlocks,
+        details: gaps.details as GapDetail[],
       },
       warnings: [],
     };

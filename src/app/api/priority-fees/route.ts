@@ -1,24 +1,56 @@
 import { NextResponse } from 'next/server';
 import { ethers } from 'ethers';
 
+// RPC request timeout (10 seconds)
+const RPC_TIMEOUT_MS = 10000;
+
+// Cache for priority fee data (block data is immutable, so cache can be long-lived)
+const priorityFeeCache = new Map<number, {
+  data: Array<{ label: string; count: number; percentage: number }> | null;
+  timestamp: number;
+}>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 100; // Keep last 100 blocks
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const blockNumber = searchParams.get('block');
-    
-    if (!blockNumber) {
+    const blockNumberParam = searchParams.get('block');
+
+    if (!blockNumberParam) {
       return NextResponse.json(
-        { error: 'Block number required' }, 
+        { error: 'Block number required' },
         { status: 400 }
       );
     }
-    
+
+    const blockNumber = parseInt(blockNumberParam, 10);
+    if (isNaN(blockNumber) || blockNumber < 0) {
+      return NextResponse.json(
+        { error: 'Invalid block number. Must be a positive integer.' },
+        { status: 400 }
+      );
+    }
+
+    // Check cache first
+    const cached = priorityFeeCache.get(blockNumber);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
+      const response = NextResponse.json({ priorityFeeDistribution: cached.data });
+      response.headers.set('X-Cache', 'HIT');
+      return response;
+    }
+
     // Use server-side env variable (not exposed to client)
     const httpsUrl = process.env.HTTPS_ETH_RPC_URL ?? "https://rpc.ankr.com/eth";
     const httpProvider = new ethers.JsonRpcProvider(httpsUrl);
-    
-    // Fetch block with transactions
-    const block = await httpProvider.getBlock(parseInt(blockNumber), true);
+
+    // Fetch block with transactions (with timeout)
+    const blockPromise = httpProvider.getBlock(blockNumber, true);
+    const timeoutPromise = new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error('RPC request timeout')), RPC_TIMEOUT_MS)
+    );
+
+    const block = await Promise.race([blockPromise, timeoutPromise]);
     
     if (!block || !block.prefetchedTransactions) {
       return NextResponse.json(
@@ -87,12 +119,37 @@ export async function GET(request: Request) {
       count: b.count,
       percentage: (b.count / priorityFees.length) * 100
     }));
-    
-    return NextResponse.json({ priorityFeeDistribution });
+
+    // Cache the result
+    priorityFeeCache.set(blockNumber, {
+      data: priorityFeeDistribution,
+      timestamp: Date.now()
+    });
+
+    // Clean up old cache entries if cache is too large
+    if (priorityFeeCache.size > MAX_CACHE_SIZE) {
+      const sortedEntries = [...priorityFeeCache.entries()].sort((a, b) => a[0] - b[0]);
+      const entriesToDelete = sortedEntries.slice(0, priorityFeeCache.size - MAX_CACHE_SIZE);
+      entriesToDelete.forEach(([key]) => priorityFeeCache.delete(key));
+    }
+
+    const response = NextResponse.json({ priorityFeeDistribution });
+    response.headers.set('X-Cache', 'MISS');
+    return response;
   } catch (error) {
-    console.error('Error fetching priority fees:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error fetching priority fees:', errorMessage);
+
+    // Return more specific error messages
+    if (errorMessage.includes('timeout')) {
+      return NextResponse.json(
+        { error: 'RPC request timed out. Please try again.' },
+        { status: 504 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Failed to fetch priority fees' }, 
+      { error: 'Failed to fetch priority fees' },
       { status: 500 }
     );
   }

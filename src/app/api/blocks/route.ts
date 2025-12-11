@@ -1,27 +1,50 @@
 import { NextResponse } from 'next/server';
 import { pool, rowToBlock, BlockRow } from '@/lib/db';
 
+const VALID_TIME_RANGES = ['30m', '4h', '12h', '24h'] as const;
+type TimeRange = typeof VALID_TIME_RANGES[number];
+
+function isValidTimeRange(value: string): value is TimeRange {
+  return VALID_TIME_RANGES.includes(value as TimeRange);
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Optional: cursor-based pagination
-    const afterBlock = searchParams.get('after');
-    const limit = Math.min(parseInt(searchParams.get('limit') || '110'), 200);
+    // Optional: cursor-based pagination with validation
+    const afterBlockParam = searchParams.get('after');
+    const afterBlock = afterBlockParam ? parseInt(afterBlockParam, 10) : null;
+    if (afterBlockParam && (isNaN(afterBlock!) || afterBlock! < 0)) {
+      return NextResponse.json(
+        { error: 'Invalid "after" parameter. Must be a positive integer.' },
+        { status: 400 }
+      );
+    }
+
+    const limitParam = searchParams.get('limit');
+    const parsedLimit = limitParam ? parseInt(limitParam, 10) : 110;
+    if (limitParam && (isNaN(parsedLimit) || parsedLimit < 1)) {
+      return NextResponse.json(
+        { error: 'Invalid "limit" parameter. Must be a positive integer.' },
+        { status: 400 }
+      );
+    }
+    const limit = Math.min(parsedLimit, 200);
 
     // Optional: time-based filtering
-    const timeRange = searchParams.get('timeRange'); // '30m', '4h', '12h', '24h', or null for 'recent'
+    const timeRange = searchParams.get('timeRange');
 
     let result;
 
-    if (afterBlock) {
+    if (afterBlock !== null) {
       // Fetch blocks newer than the cursor
       result = await pool.query<BlockRow>(
         `SELECT * FROM blocks
          WHERE block_number > $1
          ORDER BY block_number ASC
          LIMIT $2`,
-        [parseInt(afterBlock), limit]
+        [afterBlock, limit]
       );
     } else if (timeRange) {
       // Fetch blocks from the specified time range
@@ -41,15 +64,15 @@ export async function GET(request: Request) {
         '24h': 900,      // 15 minutes = 900 seconds (~96 points)
       };
 
-      const interval = intervalMap[timeRange];
-      const bucketSeconds = bucketSecondsMap[timeRange];
-
-      if (!interval) {
+      if (!isValidTimeRange(timeRange)) {
         return NextResponse.json(
           { error: 'Invalid timeRange. Use: 30m, 4h, 12h, or 24h' },
           { status: 400 }
         );
       }
+
+      const interval = intervalMap[timeRange];
+      const bucketSeconds = bucketSecondsMap[timeRange];
 
       // For 30m: fetch all blocks without bucketing
       if (bucketSeconds === null) {
@@ -128,18 +151,22 @@ export async function GET(request: Request) {
 
     const blocks = result.rows.map(rowToBlock);
 
-    // Include metadata for polling
-    const latestResult = await pool.query<{ block_number: string }>(
-      'SELECT block_number FROM blocks ORDER BY block_number DESC LIMIT 1'
-    );
+    // Get latest block from result set (avoid extra query)
+    // For DESC queries, first row is latest; for ASC queries, last row is latest
+    const latestBlock = blocks.length > 0
+      ? Math.max(...blocks.map(b => b.block))
+      : null;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       blocks,
-      latestBlock: latestResult.rows[0]?.block_number
-        ? Number(latestResult.rows[0].block_number)
-        : null,
+      latestBlock,
       hasMore: blocks.length === limit,
     });
+
+    // Add caching headers for performance (5s cache, 10s stale-while-revalidate)
+    response.headers.set('Cache-Control', 'public, max-age=5, stale-while-revalidate=10');
+
+    return response;
   } catch (error) {
     console.error('Error fetching blocks:', error);
     return NextResponse.json(
