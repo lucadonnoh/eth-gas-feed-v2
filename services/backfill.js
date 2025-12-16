@@ -1,13 +1,13 @@
 /**
- * 24-hour Historical Backfill Service
- * Fetches and inserts blocks from the last 24 hours
+ * 7-day Historical Backfill Service
+ * Fetches and inserts blocks from the last 7 days
  */
 
 const { ethers } = require('ethers');
 const { log, insertBlock, closePool } = require('./lib');
 
 async function backfill() {
-  log('info', 'Starting 24h backfill');
+  log('info', 'Starting 7-day backfill');
 
   // Setup provider
   const rpcUrl = process.env.HTTPS_ETH_RPC_URL || 'https://ethereum-rpc.publicnode.com';
@@ -19,15 +19,15 @@ async function backfill() {
     const currentBlock = await provider.getBlockNumber();
     log('info', 'Current block', { blockNumber: currentBlock });
 
-    // Calculate how many blocks for 24h (assuming 12 second block time)
-    // 24 hours = 24 * 60 * 60 / 12 = 7200 blocks
-    const blocksIn24h = 7200;
-    const startBlock = currentBlock - blocksIn24h + 1;
+    // Calculate how many blocks for 7 days (assuming 12 second block time)
+    // 7 days = 7 * 24 * 60 * 60 / 12 = 50400 blocks
+    const blocksIn7d = 50400;
+    const startBlock = currentBlock - blocksIn7d + 1;
 
     log('info', 'Backfill parameters', {
       startBlock,
       endBlock: currentBlock,
-      totalBlocks: blocksIn24h
+      totalBlocks: blocksIn7d
     });
 
     // Process in batches to avoid rate limits
@@ -67,10 +67,10 @@ async function backfill() {
       }
 
       processed += blockNumbers.length;
-      const progress = ((processed / blocksIn24h) * 100).toFixed(1);
+      const progress = ((processed / blocksIn7d) * 100).toFixed(1);
       log('info', 'Progress', {
         percent: `${progress}%`,
-        processed: `${processed}/${blocksIn24h}`,
+        processed: `${processed}/${blocksIn7d}`,
         inserted
       });
 

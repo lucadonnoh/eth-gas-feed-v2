@@ -279,8 +279,8 @@ async function main() {
   startPeriodicGapCheck();
 
   // Cleanup old blocks on startup and then every hour
-  await cleanupOldBlocks('24 hours');
-  setInterval(() => cleanupOldBlocks('24 hours'), 60 * 60 * 1000);
+  await cleanupOldBlocks('7 days');
+  setInterval(() => cleanupOldBlocks('7 days'), 60 * 60 * 1000);
 
   // Handle graceful shutdown
   const shutdown = async (signal) => {

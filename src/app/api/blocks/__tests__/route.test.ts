@@ -128,7 +128,7 @@ describe('/api/blocks', () => {
       const data = await response.json();
 
       expect(response.status).toBe(400);
-      expect(data.error).toBe('Invalid timeRange. Use: 30m, 4h, 12h, or 24h');
+      expect(data.error).toBe('Invalid timeRange. Use: 30m, 4h, 12h, 24h, or 7d');
     });
 
     it('should only query blocks with timestamps', async () => {

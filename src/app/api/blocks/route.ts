@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { pool, rowToBlock, BlockRow } from '@/lib/db';
 
-const VALID_TIME_RANGES = ['30m', '4h', '12h', '24h'] as const;
+const VALID_TIME_RANGES = ['30m', '4h', '12h', '24h', '7d'] as const;
 type TimeRange = typeof VALID_TIME_RANGES[number];
 
 function isValidTimeRange(value: string): value is TimeRange {
@@ -53,20 +53,22 @@ export async function GET(request: Request) {
         '4h': '4 hours',
         '12h': '12 hours',
         '24h': '24 hours',
+        '7d': '7 days',
       };
 
-      // Time bucket sizes (in seconds) - only for 4h, 12h, 24h
+      // Time bucket sizes (in seconds) - only for 4h, 12h, 24h, 7d
       // 30m shows all blocks without bucketing (~150 blocks)
       const bucketSecondsMap: Record<string, number | null> = {
         '30m': null,     // No bucketing - show all blocks (~150 blocks)
         '4h': 120,       // 2 minutes = 120 seconds (~120 points)
         '12h': 600,      // 10 minutes = 600 seconds (~72 points)
         '24h': 900,      // 15 minutes = 900 seconds (~96 points)
+        '7d': 3600,      // 1 hour = 3600 seconds (~168 points)
       };
 
       if (!isValidTimeRange(timeRange)) {
         return NextResponse.json(
-          { error: 'Invalid timeRange. Use: 30m, 4h, 12h, or 24h' },
+          { error: 'Invalid timeRange. Use: 30m, 4h, 12h, 24h, or 7d' },
           { status: 400 }
         );
       }

@@ -60,7 +60,7 @@ export default function GasLimitMonitor() {
     count: number;
     percentage: number;
   }> | null>(null);
-  const [timeRange, setTimeRange] = useState<'30m' | '4h' | '12h' | '24h'>('30m');
+  const [timeRange, setTimeRange] = useState<'30m' | '4h' | '12h' | '24h' | '7d'>('30m');
   const [isLoadingRange, setIsLoadingRange] = useState<boolean>(false);
   const TARGET_GAS_LIMIT = 60_000_000;
   const START_GAS_LIMIT = 45_000_000;
@@ -415,6 +415,7 @@ export default function GasLimitMonitor() {
       const blocksPerBucket = timeRange === '4h' ? 10 :   // 2 min / 12 sec
                              timeRange === '12h' ? 50 :   // 10 min / 12 sec
                              timeRange === '24h' ? 75 :   // 15 min / 12 sec
+                             timeRange === '7d' ? 300 :   // 60 min / 12 sec
                              10;
 
       targetLine = target * blocksPerBucket;
@@ -992,7 +993,7 @@ export default function GasLimitMonitor() {
       {/* Time Range Selector */}
       <div className="flex gap-2 items-center flex-wrap">
         <span className="text-sm opacity-70">Time Range:</span>
-        {(['30m', '4h', '12h', '24h'] as const).map((range) => (
+        {(['30m', '4h', '12h', '24h', '7d'] as const).map((range) => (
           <button
             key={range}
             onClick={() => setTimeRange(range)}
