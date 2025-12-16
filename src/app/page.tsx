@@ -69,22 +69,27 @@ export default function GasLimitMonitor() {
   const tooltipLabelFormatter = (label: number | string, payload?: readonly unknown[]) => {
     const firstPayload = payload?.[0] as { payload?: Point } | undefined;
 
+    // Format time with day included (e.g., "Dec 15, 14:30:45")
+    const formatDateTime = (iso: string) => {
+      const date = new Date(iso);
+      const month = date.toLocaleString('en-US', { month: 'short' });
+      const day = date.getDate();
+      const time = date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      return `${month} ${day}, ${time}`;
+    };
+
     // For bucketed data with timestamp range
     if (firstPayload?.payload?.blockRange) {
       if (firstPayload?.payload?.timestampRange) {
         const [start, end] = firstPayload.payload.timestampRange.split(',');
-        const formatTime = (iso: string) => {
-          const date = new Date(iso);
-          return date.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-          });
-        };
         return (
           <>
-            {formatTime(start)} - {formatTime(end)}
+            {formatDateTime(start)} - {formatDateTime(end)}
             <br />
             ({firstPayload.payload.blockRange})
           </>
@@ -96,18 +101,9 @@ export default function GasLimitMonitor() {
 
     // For individual blocks with timestamp (30m range)
     if (firstPayload?.payload?.timestamp) {
-      const formatTime = (iso: string) => {
-        const date = new Date(iso);
-        return date.toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        });
-      };
       return (
         <>
-          {formatTime(firstPayload.payload.timestamp)}
+          {formatDateTime(firstPayload.payload.timestamp)}
           <br />
           (Block #{label})
         </>
@@ -684,21 +680,26 @@ export default function GasLimitMonitor() {
                   if (payload && payload[0]?.payload) {
                     const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string; timestampRange?: string; timestamp?: string };
 
+                    // Format time with day included (e.g., "Dec 15, 14:30:45")
+                    const formatDateTime = (iso: string) => {
+                      const date = new Date(iso);
+                      const month = date.toLocaleString('en-US', { month: 'short' });
+                      const day = date.getDate();
+                      const time = date.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                      });
+                      return `${month} ${day}, ${time}`;
+                    };
+
                     // Show timestamp range first (more important), then block range (for bucketed data)
                     if (p.timestampRange && p.blockRange) {
                       const [start, end] = p.timestampRange.split(',');
-                      const formatTime = (iso: string) => {
-                        const date = new Date(iso);
-                        return date.toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                          hour12: false
-                        });
-                      };
                       return (
                         <>
-                          {formatTime(start)} - {formatTime(end)}
+                          {formatDateTime(start)} - {formatDateTime(end)}
                           <br />
                           ({p.blockRange})
                         </>
@@ -712,18 +713,9 @@ export default function GasLimitMonitor() {
 
                     // For individual blocks with timestamp (30m range)
                     if (p.timestamp) {
-                      const formatTime = (iso: string) => {
-                        const date = new Date(iso);
-                        return date.toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                          hour12: false
-                        });
-                      };
                       return (
                         <>
-                          {formatTime(p.timestamp)}
+                          {formatDateTime(p.timestamp)}
                           <br />
                           (Block #{label})
                         </>
