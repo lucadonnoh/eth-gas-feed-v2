@@ -69,18 +69,34 @@ export default function GasLimitMonitor() {
   const tooltipLabelFormatter = (label: number | string, payload?: readonly unknown[]) => {
     const firstPayload = payload?.[0] as { payload?: Point } | undefined;
 
-    // Format time with day included (e.g., "Dec 15, 14:30:45")
-    const formatDateTime = (iso: string) => {
-      const date = new Date(iso);
+    // Format date part (e.g., "Dec 15")
+    const formatDate = (date: Date) => {
       const month = date.toLocaleString('en-US', { month: 'short' });
       const day = date.getDate();
-      const time = date.toLocaleTimeString('en-US', {
+      return `${month} ${day}`;
+    };
+
+    // Format time part (e.g., "14:30:45")
+    const formatTime = (date: Date) => {
+      return date.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
         hour12: false
       });
-      return `${month} ${day}, ${time}`;
+    };
+
+    // Format time range, showing date once if same day
+    const formatTimeRange = (startIso: string, endIso: string) => {
+      const startDate = new Date(startIso);
+      const endDate = new Date(endIso);
+      const sameDay = startDate.toDateString() === endDate.toDateString();
+
+      if (sameDay) {
+        return `${formatDate(startDate)}, ${formatTime(startDate)} - ${formatTime(endDate)}`;
+      } else {
+        return `${formatDate(startDate)}, ${formatTime(startDate)} - ${formatDate(endDate)}, ${formatTime(endDate)}`;
+      }
     };
 
     // For bucketed data with timestamp range
@@ -89,7 +105,7 @@ export default function GasLimitMonitor() {
         const [start, end] = firstPayload.payload.timestampRange.split(',');
         return (
           <>
-            {formatDateTime(start)} - {formatDateTime(end)}
+            {formatTimeRange(start, end)}
             <br />
             ({firstPayload.payload.blockRange})
           </>
@@ -101,9 +117,10 @@ export default function GasLimitMonitor() {
 
     // For individual blocks with timestamp (30m range)
     if (firstPayload?.payload?.timestamp) {
+      const date = new Date(firstPayload.payload.timestamp);
       return (
         <>
-          {formatDateTime(firstPayload.payload.timestamp)}
+          {formatDate(date)}, {formatTime(date)}
           <br />
           (Block #{label})
         </>
@@ -680,18 +697,34 @@ export default function GasLimitMonitor() {
                   if (payload && payload[0]?.payload) {
                     const p = payload[0].payload as { totalBlobBaseFee?: number; excessBlobGas?: number; blockRange?: string; timestampRange?: string; timestamp?: string };
 
-                    // Format time with day included (e.g., "Dec 15, 14:30:45")
-                    const formatDateTime = (iso: string) => {
-                      const date = new Date(iso);
+                    // Format date part (e.g., "Dec 15")
+                    const formatDate = (date: Date) => {
                       const month = date.toLocaleString('en-US', { month: 'short' });
                       const day = date.getDate();
-                      const time = date.toLocaleTimeString('en-US', {
+                      return `${month} ${day}`;
+                    };
+
+                    // Format time part (e.g., "14:30:45")
+                    const formatTime = (date: Date) => {
+                      return date.toLocaleTimeString('en-US', {
                         hour: '2-digit',
                         minute: '2-digit',
                         second: '2-digit',
                         hour12: false
                       });
-                      return `${month} ${day}, ${time}`;
+                    };
+
+                    // Format time range, showing date once if same day
+                    const formatTimeRange = (startIso: string, endIso: string) => {
+                      const startDate = new Date(startIso);
+                      const endDate = new Date(endIso);
+                      const sameDay = startDate.toDateString() === endDate.toDateString();
+
+                      if (sameDay) {
+                        return `${formatDate(startDate)}, ${formatTime(startDate)} - ${formatTime(endDate)}`;
+                      } else {
+                        return `${formatDate(startDate)}, ${formatTime(startDate)} - ${formatDate(endDate)}, ${formatTime(endDate)}`;
+                      }
                     };
 
                     // Show timestamp range first (more important), then block range (for bucketed data)
@@ -699,7 +732,7 @@ export default function GasLimitMonitor() {
                       const [start, end] = p.timestampRange.split(',');
                       return (
                         <>
-                          {formatDateTime(start)} - {formatDateTime(end)}
+                          {formatTimeRange(start, end)}
                           <br />
                           ({p.blockRange})
                         </>
@@ -713,9 +746,10 @@ export default function GasLimitMonitor() {
 
                     // For individual blocks with timestamp (30m range)
                     if (p.timestamp) {
+                      const date = new Date(p.timestamp);
                       return (
                         <>
-                          {formatDateTime(p.timestamp)}
+                          {formatDate(date)}, {formatTime(date)}
                           <br />
                           (Block #{label})
                         </>
