@@ -7,6 +7,11 @@
 export const BPO1_UPGRADE_SLOT = 13205504;
 export const BPO1_UPGRADE_TIMESTAMP = 1765290071;
 
+// Slot 13410304 is when BPO2 upgrade activates (blob target/max increase from 10/15 to 14/21)
+// Timestamp: 1767747671 (January 7, 2026, 01:01:11 UTC)
+export const BPO2_UPGRADE_SLOT = 13410304;
+export const BPO2_UPGRADE_TIMESTAMP = 1767747671;
+
 // Genesis time for Ethereum Beacon Chain (December 1, 2020, 12:00:00 UTC)
 export const BEACON_GENESIS_TIME = 1606824000;
 
@@ -33,7 +38,10 @@ export function timestampToSlot(timestamp: number): number {
 export function getBlobLimits(slotOrTimestamp: number, isSlot: boolean = true): { target: number; max: number } {
   const timestamp = isSlot ? slotToTimestamp(slotOrTimestamp) : slotOrTimestamp;
 
-  if (timestamp >= BPO1_UPGRADE_TIMESTAMP) {
+  if (timestamp >= BPO2_UPGRADE_TIMESTAMP) {
+    // Post-BPO2: 14 target, 21 max
+    return { target: 14, max: 21 };
+  } else if (timestamp >= BPO1_UPGRADE_TIMESTAMP) {
     // Post-BPO1: 10 target, 15 max
     return { target: 10, max: 15 };
   } else {

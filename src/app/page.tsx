@@ -18,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { RollingNumber } from "@/components/RollingNumber";
 import { FlashValue } from "@/components/FlashValue";
-import { getBlobLimits, isBPO1ActiveAtTimestamp, BPO1_UPGRADE_TIMESTAMP } from "@/lib/eth";
+import { getBlobLimits, BPO1_UPGRADE_TIMESTAMP, BPO2_UPGRADE_TIMESTAMP } from "@/lib/eth";
 
 /**
  * Point represents a single Ethereum block entry for the chart & ticker.
@@ -130,25 +130,37 @@ export default function GasLimitMonitor() {
     return `Block: ${label}`;
   };
 
-  // BPO1 upgrade countdown
+  // BPO upgrade countdowns
   const [bpo1Countdown, setBpo1Countdown] = useState<string>("");
+  const [bpo2Countdown, setBpo2Countdown] = useState<string>("");
 
   useEffect(() => {
+    const formatCountdown = (seconds: number) => {
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor((seconds % 86400) / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      return `${days}d ${hours}h ${minutes}m ${secs}s`;
+    };
+
     const updateCountdown = () => {
       const now = Math.floor(Date.now() / 1000);
-      const secondsUntilBPO1 = BPO1_UPGRADE_TIMESTAMP - now;
 
+      // BPO1 countdown
+      const secondsUntilBPO1 = BPO1_UPGRADE_TIMESTAMP - now;
       if (secondsUntilBPO1 <= 0) {
-        setBpo1Countdown("BPO1 is live! 🎉");
-        return;
+        setBpo1Countdown("BPO1 is live!");
+      } else {
+        setBpo1Countdown(formatCountdown(secondsUntilBPO1));
       }
 
-      const days = Math.floor(secondsUntilBPO1 / 86400);
-      const hours = Math.floor((secondsUntilBPO1 % 86400) / 3600);
-      const minutes = Math.floor((secondsUntilBPO1 % 3600) / 60);
-      const seconds = secondsUntilBPO1 % 60;
-
-      setBpo1Countdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+      // BPO2 countdown
+      const secondsUntilBPO2 = BPO2_UPGRADE_TIMESTAMP - now;
+      if (secondsUntilBPO2 <= 0) {
+        setBpo2Countdown("BPO2 is live!");
+      } else {
+        setBpo2Countdown(formatCountdown(secondsUntilBPO2));
+      }
     };
 
     updateCountdown();
@@ -1090,24 +1102,41 @@ export default function GasLimitMonitor() {
         </div>
       )}
 
-      {/* BPO1 Upgrade Countdown */}
-      <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
-        <CardContent>
-          <div className="text-center py-2">
-            <div className="text-2xl mb-1">🚀</div>
-            <h3 className="text-base font-semibold mb-1">BPO1 Upgrade Countdown</h3>
-            <div className="text-2xl font-bold text-yellow-300 mb-1 tabular-nums">
-              {bpo1Countdown || "Loading..."}
+      {/* BPO Upgrade Countdowns */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
+          <CardContent>
+            <div className="text-center py-2">
+              <h3 className="text-base font-semibold mb-1">BPO1 Countdown</h3>
+              <div className="text-xl font-bold text-yellow-300 mb-1 tabular-nums">
+                {bpo1Countdown || "Loading..."}
+              </div>
+              <div className="text-xs opacity-70 mb-1">
+                Blob target: 6 → 10 | Max: 9 → 15
+              </div>
+              <div className="text-xs opacity-50">
+                Slot 13,205,504 • {new Date(BPO1_UPGRADE_TIMESTAMP * 1000).toLocaleString()}
+              </div>
             </div>
-            <div className="text-xs opacity-70 mb-1">
-              Blob target: 6 → 10 | Max: 9 → 15
+          </CardContent>
+        </Card>
+        <Card className="bg-[#0d0d0d] w-full" style={{ color: "#39ff14" }}>
+          <CardContent>
+            <div className="text-center py-2">
+              <h3 className="text-base font-semibold mb-1">BPO2 Countdown</h3>
+              <div className="text-xl font-bold text-cyan-300 mb-1 tabular-nums">
+                {bpo2Countdown || "Loading..."}
+              </div>
+              <div className="text-xs opacity-70 mb-1">
+                Blob target: 10 → 14 | Max: 15 → 21
+              </div>
+              <div className="text-xs opacity-50">
+                Slot 13,410,304 • {new Date(BPO2_UPGRADE_TIMESTAMP * 1000).toLocaleString()}
+              </div>
             </div>
-            <div className="text-xs opacity-50">
-              Slot 13205504 • {new Date(BPO1_UPGRADE_TIMESTAMP * 1000).toLocaleString()}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Charts */}
       <div className="relative">
