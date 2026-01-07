@@ -1,14 +1,15 @@
 /**
  * Blob base fee calculation utilities
- * Implements EIP-4844 fake exponential approximation with BPO1 upgrade support
+ * Implements EIP-4844 fake exponential approximation with BPO1/BPO2 upgrade support
  */
 
 const {
   MIN_BASE_FEE_PER_BLOB_GAS,
-  BLOB_BASE_FEE_UPDATE_FRACTION,
+  BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE,
+  BLOB_BASE_FEE_UPDATE_FRACTION_BPO1,
+  BLOB_BASE_FEE_UPDATE_FRACTION_BPO2,
   BPO1_UPGRADE_TIMESTAMP,
-  OLD_TARGET_BLOBS,
-  NEW_TARGET_BLOBS,
+  BPO2_UPGRADE_TIMESTAMP,
 } = require('./constants');
 
 /**
@@ -33,28 +34,38 @@ function fakeExponential(factor, numerator, denominator) {
 }
 
 /**
+ * Get the blob base fee update fraction for a given timestamp
+ * Each upgrade increases the fraction proportionally with the target blob count
+ * to maintain price stability (per EIP-7892)
+ *
+ * @param {number|null} blockTimestamp - Unix timestamp of the block
+ * @returns {number} The update fraction to use
+ */
+function getUpdateFraction(blockTimestamp) {
+  if (blockTimestamp && blockTimestamp >= BPO2_UPGRADE_TIMESTAMP) {
+    return BLOB_BASE_FEE_UPDATE_FRACTION_BPO2;
+  }
+  if (blockTimestamp && blockTimestamp >= BPO1_UPGRADE_TIMESTAMP) {
+    return BLOB_BASE_FEE_UPDATE_FRACTION_BPO1;
+  }
+  return BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE;
+}
+
+/**
  * Calculate blob base fee from excess blob gas
- * - Always uses parameter 5007716
- * - Pre-BPO1: Use raw excess blob gas
- * - Post-BPO1: Scale excess by old_target/new_target (6/10 = 0.6) due to target change
+ * Uses the appropriate update fraction based on block timestamp (per EIP-7892)
  *
  * @param {number} excessBlobGas - The excess blob gas
  * @param {number|null} blockTimestamp - Unix timestamp of the block (optional)
  * @returns {number} The calculated blob base fee in wei
  */
 function calculateBlobBaseFee(excessBlobGas, blockTimestamp) {
-  let effectiveExcess = excessBlobGas;
-
-  // After BPO1, scale excess by old target / new target (6/10 = 0.6)
-  const isBPO1Active = blockTimestamp && blockTimestamp >= BPO1_UPGRADE_TIMESTAMP;
-  if (isBPO1Active) {
-    effectiveExcess = Math.floor(excessBlobGas * OLD_TARGET_BLOBS / NEW_TARGET_BLOBS);
-  }
+  const updateFraction = getUpdateFraction(blockTimestamp);
 
   return fakeExponential(
     MIN_BASE_FEE_PER_BLOB_GAS,
-    effectiveExcess,
-    BLOB_BASE_FEE_UPDATE_FRACTION
+    excessBlobGas,
+    updateFraction
   );
 }
 
