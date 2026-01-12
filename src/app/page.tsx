@@ -48,6 +48,7 @@ type Point = {
  */
 export default function GasLimitMonitor() {
   const [data, setData] = useState<Point[]>([]);
+  const [tickerBlocks, setTickerBlocks] = useState<Point[]>([]); // Always individual blocks for ticker
   const [latest, setLatest] = useState<Point | null>(null);
   const [lastBlockTime, setLastBlockTime] = useState<number>(0);
   const [timeToNext, setTimeToNext] = useState<number>(12);
@@ -418,9 +419,10 @@ export default function GasLimitMonitor() {
   }, [data, timeRange]);
 
   // Memoize ticker data to avoid recalculating on every render
+  // Always use tickerBlocks (individual blocks) for the ticker
   const tickerData = useMemo(() => {
-    return data.slice(-30).slice().reverse();
-  }, [data]);
+    return tickerBlocks.slice(-30).slice().reverse();
+  }, [tickerBlocks]);
 
   const blobCountChartComponent = useMemo(() => {
     // Calculate reference lines based on bucketing
@@ -830,6 +832,19 @@ export default function GasLimitMonitor() {
           setData(blocks);
           latestBlockNumber = latestBlock;
 
+          // For 30m range, blocks are individual - use them for ticker
+          // For other ranges, fetch individual blocks separately for ticker
+          if (timeRange === '30m') {
+            setTickerBlocks(blocks);
+          } else {
+            // Fetch individual blocks for ticker
+            const tickerResponse = await fetch('/api/blocks?timeRange=30m');
+            if (tickerResponse.ok) {
+              const { blocks: individualBlocks } = await tickerResponse.json();
+              setTickerBlocks(individualBlocks);
+            }
+          }
+
           if (blocks.length > 0) {
             const latestBlockData = blocks[blocks.length - 1];
 
@@ -876,6 +891,7 @@ export default function GasLimitMonitor() {
 
           if (hasNewBlocks) {
             setData(newBlocks);
+            setTickerBlocks(newBlocks); // Also update ticker blocks
             latestBlockNumber = latestBlock;
 
             const latestNewBlock = newBlocks[newBlocks.length - 1];
@@ -895,18 +911,22 @@ export default function GasLimitMonitor() {
     // Initial load
     loadInitialBlocks();
 
-    // Polling function for non-30m ranges to keep countdown accurate
+    // Polling function for non-30m ranges to keep countdown accurate and ticker updated
     const pollLatestBlockOnly = async () => {
       if (!isMounted) return;
 
       try {
-        const response = await fetch(`/api/blocks?limit=1`);
+        // Fetch 30m of individual blocks for ticker
+        const response = await fetch(`/api/blocks?timeRange=30m`);
         if (!response.ok) return;
 
         const { blocks, latestBlock } = await response.json();
 
         if (isMounted && blocks.length > 0) {
-          const latestBlockData = blocks[0];
+          const latestBlockData = blocks[blocks.length - 1];
+
+          // Update ticker blocks with individual blocks
+          setTickerBlocks(blocks);
 
           // Only update lastBlockTime if this is a new block
           setLatest(prevLatest => {
@@ -1164,7 +1184,7 @@ export default function GasLimitMonitor() {
       {/* Scrolling ticker */}
       <Card className="bg-[#0d0d0d] max-h-64 overflow-y-auto" style={{ color: "#39ff14" }}>
         <CardContent className="space-y-2">
-          {data.length === 0 ? (
+          {tickerBlocks.length === 0 ? (
             <div className="text-center py-8">
               <div className="animate-bounce text-4xl mb-2">⏳</div>
               <div>Block history will appear here...</div>
